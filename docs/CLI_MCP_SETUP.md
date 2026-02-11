@@ -82,7 +82,7 @@ Codex MCP entries are global, managed by `codex mcp`.
 Add server:
 
 ```bash
-codex mcp add node /Users/itsupport4/Documents/project-memory-mcp-js/server.js project-memory
+codex mcp add project-memory node /Users/itsupport4/Documents/project-memory-mcp-js/server.js
 codex mcp list
 codex mcp get project-memory
 ```
@@ -90,7 +90,8 @@ codex mcp get project-memory
 Remove server:
 
 ```bash
-codex mcp remove project-memory
+codex mcp disable node
+codex mcp remove project-memor
 ```
 
 Important for project-local memory:

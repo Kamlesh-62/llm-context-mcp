@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Project-scoped centralized memory as an MCP stdio server (JSON file backend).",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:hooks": "node scripts/test-hooks.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

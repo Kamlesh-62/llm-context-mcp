@@ -37,7 +37,7 @@ Not in this MCP server folder (unless you run it from here).
 
 ## Important: what is NOT auto-saved
 
-Your full chat is **not** saved automatically.
+Your full chat is **not** saved automatically unless you enable the auto-save hook (Claude/Gemini/Codex).
 
 Only things saved by memory tools are written to `memory.json`, like:
 

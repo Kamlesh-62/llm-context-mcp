@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "auto-save",
+            "type": "command",
+            "command": "node \"$GEMINI_PROJECT_DIR/hooks/auto-save.mjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

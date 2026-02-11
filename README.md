@@ -261,6 +261,67 @@ Add `.ai/` to `.gitignore` if you don't want memory committed to the repo.
 
 ---
 
+<details>
+<summary><strong>Auto-Save Hook (Claude Code + Gemini CLI + Codex CLI)</strong></summary>
+
+The `hooks/` directory contains hooks that **automatically capture** memory items from your session — no manual `memory_save` needed for routine facts.
+
+### How it works
+
+1. When Claude finishes a response (`Stop`) or Gemini ends a session (`SessionEnd`), the hook fires in the background
+2. `hooks/auto-save.mjs` reads the session transcript
+3. Heuristic extractors pull structured signals (versions, commits, dependency installs, error resolutions, file changes)
+4. New items are deduplicated and saved to `.ai/memory.json` with `source: "auto-hook"`
+
+### What gets captured
+
+| Signal | Example | Type |
+|---|---|---|
+| Version checks | `node -v` → `v20.11.0` | fact |
+| Dependency installs | `npm install express` | fact |
+| Git commits | `git commit -m "fix auth"` | note |
+| Error → fix sequences | command fails then succeeds | fact |
+| File modifications | Write/Edit tool calls | note |
+
+### Setup
+
+Claude: configured in `.claude/settings.json`.
+Gemini: configured in `.gemini/settings.json`.
+Codex: configured in `~/.codex/config.toml` via `notify` (see below).
+
+To disable, remove or rename the relevant file.
+
+Note: Gemini hooks must write valid JSON to stdout and avoid plain text output.
+
+#### Codex setup
+
+Add to `~/.codex/config.toml`:
+
+```toml
+notify = ["node", "/Users/itsupport4/Documents/project-memory-mcp-js/hooks/codex-notify.mjs"]
+history.persistence = "save-all"
+```
+
+You can also pass an explicit history file path:
+
+```toml
+notify = ["node", "/Users/itsupport4/Documents/project-memory-mcp-js/hooks/codex-notify.mjs", "--history", "/path/to/history.jsonl"]
+```
+
+### Cursor tracking
+
+The hook tracks its position in `.ai/.auto-save-cursor.json` so it only processes new transcript lines each time. The cursor resets when a new session starts.
+
+### Manual test
+
+```bash
+echo '{"session_id":"test","transcript_path":"/tmp/test.jsonl","cwd":"/tmp"}' | node hooks/auto-save.mjs
+```
+
+</details>
+
+---
+
 ## For Kids
 
 > This section explains the project in super simple words.
@@ -275,7 +336,7 @@ Robot saves a note  ──►  .ai/memory.json  ──►  Another robot reads i
 
 ### What gets saved?
 
-Only things you ask to save with `memory_save`. Your chat is **not** saved automatically.
+Only things you ask to save with `memory_save`. Your chat is **not** saved automatically unless you enable the auto-save hook (Claude/Gemini/Codex).
 
 ### Daily steps
 

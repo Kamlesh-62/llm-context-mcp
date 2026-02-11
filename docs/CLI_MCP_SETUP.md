@@ -19,7 +19,7 @@ Memory file written by this server:
 Important:
 
 - Chat text is not auto-saved.
-- Only explicit memory write tools save data (`memory_save`, approved proposals).
+- Only explicit memory write tools save data (`memory_save`, approved proposals) unless you enable the auto-save hook.
 
 ## 2. Prerequisites
 
@@ -54,6 +54,8 @@ Use:
 
 Then restart Claude CLI from the same project folder.
 
+Optional: enable auto-save hook by keeping `.claude/settings.json` in this repo.
+
 ## 4. Gemini CLI setup (project scope)
 
 Run from target project folder:
@@ -74,6 +76,8 @@ Notes:
 
 - Gemini `mcp add` default scope is `project`.
 - Run this per repository where you want memory.
+
+Optional: enable auto-save hook by keeping `.gemini/settings.json` in this repo.
 
 ## 5. Codex CLI setup
 
@@ -98,6 +102,15 @@ Important for project-local memory:
 
 - Start Codex in the target repo (`cd /Users/itsupport4/Documents/opulence_api` then run `codex`).
 - The server resolves memory using that working directory.
+
+Optional: enable auto-save hook (Codex notify).
+
+Add to `~/.codex/config.toml`:
+
+```toml
+notify = ["node", "/Users/itsupport4/Documents/project-memory-mcp-js/hooks/codex-notify.mjs"]
+history.persistence = "save-all"
+```
 
 ## 6. Verify routing (must do once per CLI)
 

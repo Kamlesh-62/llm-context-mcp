@@ -7,6 +7,15 @@ export const CONFIG = {
   lockRetryBackoff: 1.25,
   maxLockRetryDelayMs: 250,
   maxContentSnippetChars: 280,
+  autoCompact: {
+    enabled: true,
+    maxItems: 400,
+    archiveRelPath: ".ai/memory-archive.json",
+    summaryTitle: "Archived context (auto)",
+    summaryTag: "archive",
+    summaryMaxEntries: 20,
+    growthThreshold: 50,
+  },
 };
 
 export const ALLOWED_TYPES = new Set([

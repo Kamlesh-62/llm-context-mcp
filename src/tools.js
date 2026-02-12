@@ -8,6 +8,7 @@ import {
   tokenize,
   validateType,
 } from "./domain.js";
+import { autoCompactStore, compactStoreInPlace } from "./maintenance.js";
 import { withStore } from "./storage.js";
 import { nowIso } from "./runtime.js";
 
@@ -21,7 +22,32 @@ function storeOptions(projectRoot) {
   return projectRoot ? { projectRoot } : undefined;
 }
 
+const HELP_TEXT = `
+Project Memory MCP quick help
+
+Common prompts:
+- Call memory_status and show the output. → confirms project + .ai path.
+- Call memory_get_bundle with {"prompt":"<your task>"} → load context.
+- When you finish work, Call memory_save with {"title":"...", "content":"...", "tags":["..."], "source":"claude"} → saves the new fact/decision immediately.
+- Prefer approvals? Call memory_propose with {"items":[...]} then memory_approve_proposal.
+- Need to find info later? Call memory_search with {"query":"...", "includeContent":true}.
+- Keep the store lean: Call memory_compact with {"maxItems":250} (archives oldest items).
+
+Every tool accepts optional projectRoot. More details: README.md or docs/LOCAL_SETUP.md.
+`.trim();
+
 export function registerTools(server) {
+  server.registerTool(
+    "memory_help",
+    {
+      description: "Show quick-start instructions and sample prompts for all memory tools.",
+      inputSchema: {},
+    },
+    async () => ({
+      content: [{ type: "text", text: HELP_TEXT }],
+    }),
+  );
+
   server.registerTool(
     "memory_status",
     {
@@ -247,7 +273,7 @@ export function registerTools(server) {
       let itemId = "";
 
       await withStore(
-        async (st) => {
+        async (st, ctx) => {
           const item = {
             id: newId("mem"),
             type: validateType(type),
@@ -262,6 +288,7 @@ export function registerTools(server) {
           };
           st.items.push(item);
           itemId = item.id;
+          await autoCompactStore(st, ctx);
           return true;
         },
         storeOptions(projectRoot),
@@ -338,7 +365,7 @@ export function registerTools(server) {
 
       let resultText = "";
       await withStore(
-        async (st) => {
+        async (st, ctx) => {
           const p = st.proposals.find((x) => x.id === proposalId);
           if (!p) {
             resultText = `Proposal not found: ${proposalId}`;
@@ -376,6 +403,7 @@ export function registerTools(server) {
               proposalId: p.id,
             };
             st.items.push(item);
+            await autoCompactStore(st, ctx);
             resultText = `Approved ${proposalId} -> saved as item ${item.id}`;
           } else {
             resultText = `Rejected ${proposalId}`;
@@ -417,6 +445,68 @@ export function registerTools(server) {
         storeOptions(projectRoot),
       );
       return { content: [{ type: "text", text: msg }] };
+    },
+  );
+
+  server.registerTool(
+    "memory_compact",
+    {
+      description:
+        "Archive older memory items into a separate file and add a summary entry to keep the main store small.",
+      inputSchema: {
+        maxItems: z
+          .number()
+          .int()
+          .min(10)
+          .max(2000)
+          .optional()
+          .describe("Maximum items to keep active after compaction."),
+        archivePath: z
+          .string()
+          .optional()
+          .describe("Optional override archive file path (default .ai/memory-archive.json)."),
+        summaryTitle: z.string().optional(),
+        summaryTags: z.array(z.string()).optional(),
+        summaryMaxEntries: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe("How many archived items to list in the summary body."),
+        projectRoot: projectRootInput,
+      },
+    },
+    async ({
+      maxItems,
+      archivePath,
+      summaryTitle,
+      summaryTags,
+      summaryMaxEntries,
+      projectRoot,
+    }) => {
+      let result = { archived: 0 };
+      await withStore(
+        async (st, ctx) => {
+          result = await compactStoreInPlace(st, ctx, {
+            maxItems,
+            archivePath,
+            summaryTitle,
+            summaryTags,
+            summaryMaxEntries,
+            reason: "manual",
+          });
+          return result.archived > 0;
+        },
+        storeOptions(projectRoot),
+      );
+
+      const text =
+        result.archived > 0
+          ? `Archived ${result.archived} item(s) into ${result.archivePath}`
+          : "No compaction needed (store below threshold).";
+
+      return { content: [{ type: "text", text }] };
     },
   );
 }

@@ -6,6 +6,8 @@ Shared, project-scoped memory for **Claude Code**, **Codex**, and **Gemini CLI**
 You (any CLI) ──► MCP Server ──► .ai/memory.json (per project)
 ```
 
+This repository ships a Node.js MCP server that persists project facts/decisions into `<project>/.ai/memory.json`. Any supported CLI can read/write the same file, so switching between Claude, Codex, and Gemini feels stateful: load context with `memory_get_bundle`, perform work, and save what changed with `memory_save`.
+
 ## TL;DR
 
 ```bash
@@ -23,75 +25,45 @@ That's the core loop: **get bundle → do work → save what matters**.
 
 ---
 
-## Get Started
+## Quick setup (per project)
 
-### 1. Install
+1. **Install / update this repo once**
+   ```bash
+   cd /path/to/project-memory-mcp-js
+   git pull && npm install
+   ```
+2. **From the target project folder (e.g. `/path/to/my-app`) wire each CLI**
+   - **Claude Code** – edit `~/.claude.json` and add:
+     ```json
+     "mcpServers": {
+       "project-memory": {
+         "command": "node",
+         "args": ["/path/to/project-memory-mcp-js/server.js"],
+         "cwd": "/path/to/my-app"
+       }
+     }
+     ```
+     Restart Claude inside `/path/to/my-app`.
+   - **Gemini CLI**
+     ```bash
+     cd /path/to/my-app
+     gemini mcp add project-memory node /path/to/project-memory-mcp-js/server.js --trust
+     gemini mcp list          # should show CONNECTED
+     /mcp                     # (in-session) inspect tools/resources
+     ```
+     Edit `.gemini/settings.json` if you need custom `cwd` or env vars.
+   - **Codex CLI**
+     ```bash
+     cd /path/to/my-app
+     codex mcp add project-memory node /path/to/project-memory-mcp-js/server.js
+     codex mcp list
+     ```
+     Always start `codex` from `/path/to/my-app` so the server detects the right root.
+3. **Verify routing**
+   - In that project, ask your CLI to `Call memory_status and show the output.` You should see `projectRoot` = `/path/to/my-app` and `memoryFilePath` = `/path/to/my-app/.ai/memory.json`. If not, fix the MCP config (`cwd`, env vars, etc.) before continuing.
+   - Need a reminder of commands? Run `memory_help` anytime for the cheat sheet.
 
-```bash
-cd /path/to/project-memory-mcp-js
-npm install
-```
-
-### 2. Connect your CLI
-
-<details>
-<summary><strong>Claude Code</strong></summary>
-
-Edit `~/.claude.json` — add to your target project's `mcpServers`:
-
-```json
-"mcpServers": {
-  "project-memory": {
-    "command": "node",
-    "args": ["/path/to/project-memory-mcp-js/server.js"],
-    "cwd": "/path/to/your-target-project"
-  }
-}
-```
-
-Restart Claude CLI from the project folder.
-
-</details>
-
-<details>
-<summary><strong>Gemini CLI</strong></summary>
-
-Run from your target project folder:
-
-```bash
-cd /path/to/your-target-project
-gemini mcp add project-memory node /path/to/project-memory-mcp-js/server.js
-```
-
-Gemini scopes to `project` by default. Run this per repo where you want memory.
-
-Remove: `gemini mcp remove project-memory`
-
-</details>
-
-<details>
-<summary><strong>Codex CLI</strong></summary>
-
-Codex MCP entries are global:
-
-```bash
-codex mcp add project-memory node /path/to/project-memory-mcp-js/server.js
-```
-
-Important: start Codex from the target repo folder so the server resolves the correct project root.
-
-Remove: `codex mcp remove project-memory`
-
-</details>
-
-### 3. Verify
-
-In any connected CLI, call `memory_status`. Confirm:
-
-- `projectRoot` → your target repo
-- `memoryFilePath` → `<target>/.ai/memory.json`
-
-If wrong, fix your CLI config before continuing.
+> Prefer the long-form guide (env overrides, troubleshooting, auto hooks)? See `docs/LOCAL_SETUP.md`.
 
 ---
 
@@ -128,6 +100,12 @@ Call `memory_get_bundle` with prompt "I am fixing login API bugs" and maxItems 1
 
 </details>
 
+### Automatic compaction & archives
+
+- The server automatically compacts when more than **400** active items exist (see `CONFIG.autoCompact`). Oldest entries are moved to `.ai/memory-archive.json`, and a summary note is added so you still know what was archived.
+- To trigger compaction manually (or tune thresholds per project), call `memory_compact` and provide overrides such as `{ "maxItems": 250 }`.
+- Archived content stays available for future manual review—`memory_get_bundle` only surfaces the most relevant active notes while summaries keep the historical trail discoverable.
+
 ---
 
 ## Reference
@@ -139,6 +117,7 @@ Call `memory_get_bundle` with prompt "I am fixing login API bugs" and maxItems 1
 
 | Tool | Purpose |
 |---|---|
+| `memory_help` | Quick-start usage tips + sample prompts |
 | `memory_status` | Show resolved project root, memory file path, counts, revision |
 | `memory_search` | Keyword/tag search over saved items |
 | `memory_get_bundle` | Compact ranked memory bundle for current task |
@@ -158,9 +137,34 @@ Call `memory_get_bundle` with prompt "I am fixing login API bugs" and maxItems 1
 | `memory_propose` | Create proposals (pending approval) |
 | `memory_approve_proposal` | Approve/reject proposal, optional edits |
 
+### Maintenance
+
+| Tool | Purpose |
+|---|---|
+| `memory_compact` | Archive older items into `.ai/memory-archive.json` and add a summary note, keeping the active store lean |
+
 All write tools accept an optional `projectRoot` input for multi-project routing.
 
 </details>
+
+### Tool invocation cheatsheet
+
+| Tool | Minimal CLI prompt | Notes |
+|---|---|---|
+| `memory_status` | `Call memory_status and show the output.` | Confirms `projectRoot` + `.ai/memory.json` before you start. |
+| `memory_help` | `Call memory_help.` | Returns this cheat sheet + best-practice prompts. |
+| `memory_get_bundle` | `Call memory_get_bundle with {"prompt":"Fixing login bugs"}` | Adjust `maxItems`, `types`, or `projectRoot` per task. |
+| `memory_save` | `Call memory_save with {"title":"New API",...}` | Provide `content`; optionally `tags`, `pinned`, `source`. |
+| `memory_search` | `Call memory_search with {"query":"redis"}` | Add `includeContent`, `tags`, or `types` filters. |
+| `memory_propose` | `Call memory_propose with {"items":[...],"reason":"code review"}` | Use when you want an approval step before saving. |
+| `memory_approve_proposal` | `Call memory_approve_proposal with {"proposalId":"prop_...","action":"approve"}` | Include `edits` to tweak proposal content before approval. |
+| `memory_pin` | `Call memory_pin with {"itemId":"mem_...","pinned":true}` | Pinning keeps key notes surfaced in bundles. |
+| `memory_compact` | `Call memory_compact with {"maxItems":250}` | Keeps the active store lean; omit payload to use defaults. |
+
+Usage tips:
+
+- **Claude Code / Codex CLI**: type the phrase exactly (e.g. “Call memory_status…”). They’ll run the tool and return the output inline.
+- **Gemini CLI**: either type the sentence or run `memory_compact {"maxItems":250}` directly in the terminal. `/mcp` shows the live list of tools + descriptions.
 
 <details>
 <summary><strong>Data Model</strong></summary>
@@ -268,95 +272,253 @@ The `hooks/` directory contains hooks that **automatically capture** memory item
 
 ### How it works
 
-1. When Claude finishes a response (`Stop`) or Gemini ends a session (`SessionEnd`), the hook fires in the background
-2. `hooks/auto-save.mjs` reads the session transcript
-3. Heuristic extractors pull structured signals (versions, commits, dependency installs, error resolutions, file changes)
-4. New items are deduplicated and saved to `.ai/memory.json` with `source: "auto-hook"`
+The auto-save hook runs **silently in the background** after each session:
 
-### What gets captured
+1. **Trigger**: When your CLI session ends:
+   - Claude Code: on `Stop` event (Ctrl+C or session end)
+   - Gemini CLI: on `SessionEnd` event
+   - Codex CLI: on notify events (when configured)
 
-| Signal | Example | Type |
-|---|---|---|
-| Version checks | `node -v` → `v20.11.0` | fact |
-| Dependency installs | `npm install express` | fact |
-| Git commits | `git commit -m "fix auth"` | note |
-| Error → fix sequences | command fails then succeeds | fact |
-| File modifications | Write/Edit tool calls | note |
+2. **Processing**:
+   - `hooks/auto-save.mjs` reads the session transcript (JSONL or JSON format)
+   - Heuristic extractors analyze tool calls and results
+   - Extracts structured facts like versions, dependencies, commits, error fixes
 
-### Setup
+3. **Saving**:
+   - Deduplicates against existing memory using title hashing and similarity checks
+   - Saves new items to `.ai/memory.json` with `source: "auto-hook"` and `tags: ["auto-hook"]`
+   - Updates cursor in `.ai/.auto-save-cursor.json` to track progress
 
-Claude: configured in `.claude/settings.json`.
-Gemini: configured in `.gemini/settings.json`.
-Codex: configured in `~/.codex/config.toml` via `notify` (see below).
+4. **Next session**: Only processes new transcript lines since last cursor position
 
-To disable, remove or rename the relevant file.
+### What gets captured automatically
 
-Note: Gemini hooks must write valid JSON to stdout and avoid plain text output.
+| Category | Example Command | Extracted Item | Type |
+|---|---|---|---|
+| **Version checks** | `node -v` | "node version: v20.11.0" | fact |
+| | `python --version` | "python version: 3.11.5" | fact |
+| | `npm -v`, `pip -v`, `go version` | version facts | fact |
+| **Dependencies** | `npm install express` | "Added dependency: express" | fact |
+| | `pip install requests` | "Added dependency: requests" | fact |
+| | `cargo add tokio` | "Added dependency: tokio" | fact |
+| **Git commits** | `git commit -m "fix auth bug"` | "Commit: fix auth bug" | note |
+| **Error fixes** | Command fails → retried command succeeds | "Resolved: [error summary]" | fact |
+| **File changes** | Write/Edit tool calls | "Files modified this session (5)" | note |
 
-#### Codex setup
+All auto-saved items get these tags:
+- `auto-hook` - identifies auto-captured items
+- Category-specific tags: `version`, `environment`, `dependency`, `commit`, `error-resolution`, `file-changes`
 
-Add to `~/.codex/config.toml`:
+### Example: What you'll see
 
-```toml
-notify = ["node", "/Users/itsupport4/Documents/project-memory-mcp-js/hooks/codex-notify.mjs"]
-history.persistence = "save-all"
+**During session:**
+```bash
+$ node -v
+v20.11.0
+$ npm install express
+added 57 packages
+$ git commit -m "Add express server"
+[main abc1234] Add express server
 ```
 
-You can also pass an explicit history file path:
+**After session ends** (automatic, silent):
+
+Your `.ai/memory.json` will contain:
+```json
+{
+  "items": [
+    {
+      "id": "mem_a1b2c3d4",
+      "type": "fact",
+      "title": "node version: v20.11.0",
+      "content": "Detected via `node -v`",
+      "tags": ["version", "environment", "auto-hook"],
+      "source": "auto-hook",
+      "createdAt": "2026-02-12T13:39:17.364Z"
+    },
+    {
+      "id": "mem_e5f6g7h8",
+      "type": "fact",
+      "title": "Added dependency: express",
+      "content": "Installed via `npm install express`",
+      "tags": ["dependency", "auto-hook"],
+      "source": "auto-hook",
+      "createdAt": "2026-02-12T13:39:18.123Z"
+    },
+    {
+      "id": "mem_i9j0k1l2",
+      "type": "note",
+      "title": "Commit: Add express server",
+      "content": "Full command: git commit -m \"Add express server\"",
+      "tags": ["commit", "auto-hook"],
+      "source": "auto-hook",
+      "createdAt": "2026-02-12T13:39:19.456Z"
+    }
+  ]
+}
+```
+
+### Setup per CLI
+
+#### Claude Code (already configured)
+
+This repo includes `.claude/settings.json`:
+```json
+{
+  "hooks": {
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "node \"$CLAUDE_PROJECT_DIR/hooks/auto-save.mjs\"",
+        "async": true,
+        "timeout": 15
+      }]
+    }]
+  }
+}
+```
+
+**Status**: ✅ Works automatically in this project
+
+**To disable**: Remove or rename `.claude/settings.json`
+
+**Environment**: Hook receives `CLAUDE_PROJECT_DIR` env var pointing to project root
+
+---
+
+#### Gemini CLI (already configured)
+
+This repo includes `.gemini/settings.json`:
+```json
+{
+  "hooks": {
+    "SessionEnd": [{
+      "matcher": "*",
+      "hooks": [{
+        "name": "auto-save",
+        "type": "command",
+        "command": "node \"$GEMINI_PROJECT_DIR/hooks/auto-save.mjs\""
+      }]
+    }]
+  }
+}
+```
+
+**Status**: ✅ Works automatically in this project
+
+**To disable**: Remove or rename `.gemini/settings.json`
+
+**Environment**: Hook receives `GEMINI_PROJECT_DIR` env var pointing to project root
+
+**Important**: Gemini hooks must output valid JSON to stdout. The hook returns `{}` for compatibility.
+
+---
+
+#### Codex CLI (needs manual setup)
+
+**Setup required**: Edit your global Codex config at `~/.codex/config.toml`:
 
 ```toml
-notify = ["node", "/Users/itsupport4/Documents/project-memory-mcp-js/hooks/codex-notify.mjs", "--history", "/path/to/history.jsonl"]
+# Enable history persistence (required for hooks to access transcript)
+[history]
+persistence = "save-all"  # or just true
+
+# Add the notify hook (adjust path to your installation)
+[notify]
+command = ["node", "/absolute/path/to/project-memory-mcp-js/hooks/codex-notify.mjs"]
 ```
+
+Replace `/absolute/path/to/project-memory-mcp-js` with your actual installation path.
+
+**Optional**: Pass explicit history file path:
+```toml
+[notify]
+command = ["node", "/path/to/hooks/codex-notify.mjs", "--history", "/path/to/history.jsonl"]
+```
+
+**To disable**: Remove the `[notify]` section from `config.toml`
+
+**Environment**: Hook receives `CODEX_PROJECT_DIR` env var pointing to project root
+
+**How it works**:
+1. Codex calls `codex-notify.mjs` with its notification payload
+2. The notify hook parses Codex's payload format and forwards it to `auto-save.mjs`
+3. Same extraction and saving process as Claude/Gemini
+
+---
+
+### Deduplication strategy
+
+The hook prevents duplicate items using multiple strategies:
+
+1. **Title hash tracking**: SHA-256 hash of each title stored in cursor file
+2. **Jaccard similarity**: Compares word overlap between new and existing titles (threshold: 80%)
+3. **Cross-session dedup**: Hashes persist across sessions to prevent re-capturing the same facts
+4. **Cursor position**: Only processes new transcript lines since last run
 
 ### Cursor tracking
 
-The hook tracks its position in `.ai/.auto-save-cursor.json` so it only processes new transcript lines each time. The cursor resets when a new session starts.
+State tracked in `.ai/.auto-save-cursor.json`:
+```json
+{
+  "sessionId": "current-session-id",
+  "lastLineIndex": 42,
+  "itemHashes": ["hash1", "hash2", "..."],
+  "updatedAt": "2026-02-12T13:39:17.658Z"
+}
+```
 
-### Manual test
+- `sessionId` - Current session ID (resets cursor position on session change)
+- `lastLineIndex` - Last processed transcript line (0-indexed)
+- `itemHashes` - Recent title hashes (keeps last 200 for dedup)
+- `updatedAt` - Last update timestamp
 
+**Session change behavior**: When `sessionId` changes, `lastLineIndex` resets to -1 but `itemHashes` are preserved for cross-session deduplication.
+
+### Minimum threshold
+
+To reduce noise, the hook only processes transcripts with **at least 2 assistant messages** in the new lines since last cursor position.
+
+Single-turn exchanges are skipped.
+
+### Testing the hook
+
+**Automated test** (all three CLIs):
 ```bash
-echo '{"session_id":"test","transcript_path":"/tmp/test.jsonl","cwd":"/tmp"}' | node hooks/auto-save.mjs
+npm run test:hooks
+```
+
+This creates a test transcript and verifies all three hooks work correctly.
+
+**Manual test** (single hook):
+```bash
+echo '{"session_id":"test","transcript_path":"/tmp/test.jsonl","cwd":"'$(pwd)'"}' | node hooks/auto-save.mjs
+```
+
+**Verify saved items**:
+```bash
+# Check memory file
+cat .ai/memory.json | jq '.items[] | select(.source == "auto-hook")'
+
+# Check cursor
+cat .ai/.auto-save-cursor.json
+```
+
+### Troubleshooting
+
+| Issue | Solution |
+|---|---|
+| Hook not running | Check CLI settings file exists (`.claude/settings.json`, `.gemini/settings.json`) or Codex `config.toml` |
+| No items saved | Check transcript has at least 2 assistant messages. Try running `node -v` and ending session. |
+| Items not appearing | Verify `.ai/memory.json` exists and check for errors in hook stderr |
+| Duplicates appearing | Check cursor file `.ai/.auto-save-cursor.json` is being updated |
+| Codex hook not working | Ensure `history.persistence` is enabled and history file exists |
+
+**Debug mode**: Run hook manually with test payload to see errors:
+```bash
+node hooks/auto-save.mjs < test-payload.json
 ```
 
 </details>
 
 ---
-
-## For Kids
-
-> This section explains the project in super simple words.
-
-You have 3 robot helpers: **Claude**, **Codex**, and **Gemini**. They help you write code — but each one forgets things between chats.
-
-This project is a **shared notebook** they can all read and write:
-
-```
-Robot saves a note  ──►  .ai/memory.json  ──►  Another robot reads it later
-```
-
-### What gets saved?
-
-Only things you ask to save with `memory_save`. Your chat is **not** saved automatically unless you enable the auto-save hook (Claude/Gemini/Codex).
-
-### Daily steps
-
-1. Open your coding project
-2. Start Claude or Gemini in that folder
-3. Ask: "Call `memory_get_bundle`" to load old notes
-4. Do your work
-5. Ask: "Call `memory_save`" to store what you learned
-
-### What is MCP?
-
-MCP is like a phone line between your AI and tools:
-
-- AI says: "Please run `memory_save`"
-- MCP server does it
-- AI gets the result back
-
-### Why this helps
-
-- Less repeating yourself
-- All robots share one memory
-- Works on your local machine
-- Memory stays inside each project

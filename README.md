@@ -8,10 +8,18 @@ You (any CLI) ──► MCP Server ──► .ai/memory.json (per project)
 
 This repository ships a Node.js MCP server that persists project facts/decisions into `<project>/.ai/memory.json`. Any supported CLI can read/write the same file, so switching between Claude, Codex, and Gemini feels stateful: load context with `memory_get_bundle`, perform work, and save what changed with `memory_save`.
 
-## TL;DR
+## Installation
 
 ```bash
-npm install && npm start          # start the server
+# Install globally (recommended)
+npm install -g project-memory-mcp
+
+# Or use npx (no install needed)
+npx project-memory-mcp
+
+# Or clone and run locally
+git clone https://github.com/nicobailon/project-memory-mcp-js.git
+cd project-memory-mcp-js && npm install && npm start
 ```
 
 | What you want | Tool to call |
@@ -27,18 +35,35 @@ That's the core loop: **get bundle → do work → save what matters**.
 
 ## Quick setup (per project)
 
-1. **Install / update this repo once**
+1. **Install the package** (pick one)
    ```bash
-   cd /path/to/project-memory-mcp-js
-   git pull && npm install
+   npm install -g project-memory-mcp   # global install
+   # or use npx — no install needed
    ```
-2. **From the target project folder (e.g. `/path/to/my-app`) wire each CLI**
+
+2. **Run the guided setup (recommended)**
+   ```bash
+   # from the repo you want to wire up (or pass --project)
+   npx project-memory-mcp setup
+   # or, after a global install:
+   project-memory-mcp setup
+   ```
+   - Prompts for the project directory (defaults to your current working folder).
+   - Lets you choose how to launch the MCP server (`npx`, global binary, `node /path/to/server.js`, or a custom command).
+   - Lets you pick which CLIs to configure (Claude Code, Gemini CLI, Codex CLI).
+   - Automatically updates `~/.claude.json` (with a `.bak` backup) and runs the necessary `gemini mcp` / `codex mcp` commands so they point at the right project.
+   - Flags: `--project /path`, `--cli claude,gemini`, `--runner global`, `--yes`, `--command`, and `--args` let you script it or skip prompts. Run `project-memory-mcp setup --help` for the full list.
+   - Requires the corresponding CLIs to already be installed and on your `PATH`.
+
+   <details>
+   <summary>Prefer the fully manual wiring? Expand for the original commands.</summary>
+
    - **Claude Code** – edit `~/.claude.json` and add:
      ```json
      "mcpServers": {
        "project-memory": {
-         "command": "node",
-         "args": ["/path/to/project-memory-mcp-js/server.js"],
+         "command": "npx",
+         "args": ["project-memory-mcp"],
          "cwd": "/path/to/my-app"
        }
      }
@@ -47,7 +72,7 @@ That's the core loop: **get bundle → do work → save what matters**.
    - **Gemini CLI**
      ```bash
      cd /path/to/my-app
-     gemini mcp add project-memory node /path/to/project-memory-mcp-js/server.js --trust
+     gemini mcp add project-memory npx project-memory-mcp --trust
      gemini mcp list          # should show CONNECTED
      /mcp                     # (in-session) inspect tools/resources
      ```
@@ -55,10 +80,12 @@ That's the core loop: **get bundle → do work → save what matters**.
    - **Codex CLI**
      ```bash
      cd /path/to/my-app
-     codex mcp add project-memory node /path/to/project-memory-mcp-js/server.js
+     codex mcp add project-memory npx project-memory-mcp
      codex mcp list
      ```
      Always start `codex` from `/path/to/my-app` so the server detects the right root.
+   </details>
+
 3. **Verify routing**
    - In that project, ask your CLI to `Call memory_status and show the output.` You should see `projectRoot` = `/path/to/my-app` and `memoryFilePath` = `/path/to/my-app/.ai/memory.json`. If not, fix the MCP config (`cwd`, env vars, etc.) before continuing.
    - Need a reminder of commands? Run `memory_help` anytime for the cheat sheet.

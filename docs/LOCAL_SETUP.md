@@ -34,7 +34,27 @@ MEMORY_FILE_PATH=.ai/custom-memory.json \
 node server.js
 ```
 
-## 4. Quick setup for a new project
+## 4. Guided setup command (recommended)
+
+Skip the manual wiring by running the built-in wizard inside the project you want to enable (or pass `--project /path/to/project`):
+
+```bash
+npx project-memory-mcp setup
+# or, after a global install
+project-memory-mcp setup
+```
+
+What it does:
+
+- Prompts for the project directory (defaults to your current working directory).
+- Lets you pick how the server should be launched (`npx project-memory-mcp`, global binary, `node /absolute/path/server.js`, or a fully custom command/args).
+- Lets you choose which CLIs to configure (Claude Code, Gemini CLI, Codex CLI).
+- Updates `~/.claude.json` (with a `.bak` backup), then runs `gemini mcp` / `codex mcp` commands so they point to the right repo. Each CLI must already be installed and available on your `PATH`.
+- Supports automation via flags such as `--project`, `--cli claude,gemini`, `--runner global`, `--command`, `--args`, and `--yes` to skip prompts. Run `project-memory-mcp setup --help` for the full list.
+
+You can re-run the wizard anytime; it safely overwrites the `project-memory` entries with your latest choices.
+
+## 5. Manual quick setup for a new project
 
 Follow these minimal steps whenever you want to enable shared memory in another repo (e.g. `/path/to/my-app`):
 
@@ -75,7 +95,7 @@ Follow these minimal steps whenever you want to enable shared memory in another 
 
 Once these steps pass, all subsequent sessions in that repo automatically use the latest MCP server code.
 
-## 5. Configure each CLI (details)
+## 6. Configure each CLI (details)
 
 Run these commands from the project whose memory you want to persist (e.g. `/Users/.../opulence_api`).
 
@@ -123,7 +143,7 @@ codex mcp get project-memory
 
 Always start Codex from the target repo (`cd /Users/.../opulence_api && codex`) so the server sees that folder as the project root. Optional notify hook: add to `~/.codex/config.toml`.
 
-## 6. Verify routing & run a smoke test
+## 7. Verify routing & run a smoke test
 
 1. Start a fresh CLI session in the target repo.
 2. Run `memory_status`. Expected output:
@@ -133,7 +153,7 @@ Always start Codex from the target repo (`cd /Users/.../opulence_api && codex`) 
 4. Check `.ai/memory.json` for the saved entry.
 5. Switch to another CLI (e.g., Gemini after Claude) and run `memory_get_bundle` to ensure cross-client sharing works.
 
-## 7. Troubleshooting checklist
+## 8. Troubleshooting checklist
 
 | Symptom | Fix |
 |---|---|
@@ -143,7 +163,7 @@ Always start Codex from the target repo (`cd /Users/.../opulence_api && codex`) 
 | Writes not saving | Make sure you called `memory_save` or approved proposals; check `.ai` folder permissions |
 | Lock errors | Check for stale `.ai/memory.json.lock` file and remove after ensuring no other process is running |
 
-## 8. Optional auto-save hooks
+## 9. Optional auto-save hooks
 
 Leave the provided hook configs inside your project to capture info automatically when sessions end:
 
@@ -164,7 +184,7 @@ For a fully hands-off flow, use the new `hooks/auto-memory.mjs` script:
 
 Use the same command for Gemini (`"$GEMINI_PROJECT_DIR"` in the path) or Codex (`"$CODEX_PROJECT_DIR"`). The script auto-detects which CLI invoked it and prints `{}` for Gemini when no output is needed.
 
-## 9. Managing store size
+## 10. Managing store size
 
 - The server auto-compacts once more than 400 active items exist (see `src/config.js > CONFIG.autoCompact`). Oldest entries move into `.ai/memory-archive.json`, and a summary item (tagged `archive`) stays in the main store.
 - Trigger the same logic manually via the `memory_compact` tool, e.g. `Call memory_compact with {"maxItems":250}` to keep only the latest 250 active records.

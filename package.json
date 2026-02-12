@@ -1,12 +1,40 @@
 {
   "name": "project-memory-mcp",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Project-scoped centralized memory as an MCP stdio server (JSON file backend).",
+  "main": "./server.js",
+  "bin": {
+    "project-memory-mcp": "./server.js"
+  },
+  "files": [
+    "src/",
+    "hooks/",
+    "server.js",
+    "README.md",
+    "docs/"
+  ],
   "scripts": {
     "start": "node server.js",
     "test:hooks": "node scripts/test-hooks.mjs"
+  },
+  "keywords": [
+    "mcp",
+    "memory",
+    "claude",
+    "codex",
+    "gemini",
+    "ai",
+    "context",
+    "model-context-protocol"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nicobailon/project-memory-mcp-js.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

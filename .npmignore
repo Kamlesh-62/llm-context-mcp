@@ -1,0 +1,18 @@
+# Runtime data
+.ai/
+.claude/
+.gemini/
+
+# Git
+.git/
+.gitignore
+
+# Dev/test scripts
+scripts/
+
+# OS files
+.DS_Store
+*.log
+
+# Dependencies
+node_modules/

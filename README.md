@@ -105,6 +105,7 @@ Call `memory_get_bundle` with prompt "I am fixing login API bugs" and maxItems 1
 - The server automatically compacts when more than **400** active items exist (see `CONFIG.autoCompact`). Oldest entries are moved to `.ai/memory-archive.json`, and a summary note is added so you still know what was archived.
 - To trigger compaction manually (or tune thresholds per project), call `memory_compact` and provide overrides such as `{ "maxItems": 250 }`.
 - Archived content stays available for future manual review—`memory_get_bundle` only surfaces the most relevant active notes while summaries keep the historical trail discoverable.
+- Want zero-click context? Configure the optional `hooks/auto-memory.mjs` script (`... start` on `UserPromptSubmit`, `... stop` on `Stop`) to auto-inject bundles and auto-save transcripts.
 
 ---
 

@@ -2,7 +2,7 @@
 /**
  * Codex CLI notify hook.
  * Reads Codex notification payload from stdin, locates the transcript/history
- * file, and forwards a normalized payload to hooks/auto-save.mjs.
+ * file, and forwards a normalized payload to hooks/auto-memory.mjs.
  *
  * Usage in ~/.codex/config.toml:
  * notify = ["node", "/path/to/project-memory-mcp-js/hooks/codex-notify.mjs"]
@@ -108,11 +108,11 @@ async function main() {
   };
 
   const ROOT = resolve(fileURLToPath(import.meta.url), "../..");
-  const autoSavePath = resolve(ROOT, "hooks", "auto-save.mjs");
+  const autoSavePath = resolve(ROOT, "hooks", "auto-memory.mjs");
 
   const child = spawn(
     "node",
-    [autoSavePath],
+    [autoSavePath, "stop"],
     {
       stdio: ["pipe", "ignore", "ignore"],
       env: {

@@ -5,12 +5,20 @@
         "matcher": "*",
         "hooks": [
           {
-            "name": "auto-save",
+            "name": "auto-memory-stop",
             "type": "command",
-            "command": "node \"$GEMINI_PROJECT_DIR/hooks/auto-save.mjs\""
+            "command": "node \"$GEMINI_PROJECT_DIR/hooks/auto-memory.mjs\" stop"
           }
         ]
       }
     ]
+  },
+  "mcpServers": {
+    "project-memory": {
+      "command": "node",
+      "args": [
+        "/Users/itsupport4/Documents/project-memory-mcp-js/server.js"
+      ]
+    }
   }
 }

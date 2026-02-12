@@ -153,6 +153,17 @@ Leave the provided hook configs inside your project to capture info automaticall
 
 Run `npm run test:hooks` inside this repo to simulate all hook flows end-to-end.
 
+### Auto-memory (bundle + save) hook
+
+For a fully hands-off flow, use the new `hooks/auto-memory.mjs` script:
+
+| CLI Event | Command | What it does |
+|---|---|---|
+| `UserPromptSubmit` (first user message) | `node "$CLAUDE_PROJECT_DIR/hooks/auto-memory.mjs" start` | Compacts if needed, then injects a fresh `memory_get_bundle` result into the conversation. |
+| `Stop` (session end) | `node "$CLAUDE_PROJECT_DIR/hooks/auto-memory.mjs" stop` | Mirrors `auto-save.mjs`: parses transcript, auto-saves important facts/decisions. |
+
+Use the same command for Gemini (`"$GEMINI_PROJECT_DIR"` in the path) or Codex (`"$CODEX_PROJECT_DIR"`). The script auto-detects which CLI invoked it and prints `{}` for Gemini when no output is needed.
+
 ## 9. Managing store size
 
 - The server auto-compacts once more than 400 active items exist (see `src/config.js > CONFIG.autoCompact`). Oldest entries move into `.ai/memory-archive.json`, and a summary item (tagged `archive`) stays in the main store.

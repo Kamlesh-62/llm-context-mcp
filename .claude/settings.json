@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/hooks/auto-save.mjs\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/hooks/auto-memory.mjs\" stop",
             "async": true,
             "timeout": 15
           }

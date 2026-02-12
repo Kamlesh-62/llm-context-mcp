@@ -14,6 +14,7 @@ export const CONFIG = {
     summaryTitle: "Archived context (auto)",
     summaryTag: "archive",
     summaryMaxEntries: 20,
+    growthThreshold: 50,
   },
 };
 

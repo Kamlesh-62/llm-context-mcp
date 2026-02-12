@@ -50,6 +50,13 @@ function unwrap(line) {
       return { role: normalizeRole(line.message.role), content };
     }
   }
+  // Lines with type but no message wrapper (type: "assistant" | "user" with direct content)
+  if ((line.type === "assistant" || line.type === "user") && line.content !== undefined) {
+    const content = normalizeContent(line.content, line.parts);
+    if (content !== null) {
+      return { role: normalizeRole(line.type), content };
+    }
+  }
   // Progress lines (subagent tool calls/results)
   if (line.type === "progress" && line.data?.message?.message) {
     const inner = line.data.message.message;
@@ -260,6 +267,65 @@ export function extractFileChanges(lines) {
   ];
 }
 
+// ── Extractor 4: Decisions / constraints / architecture from assistant text ──
+
+const DECISION_PATTERNS = [
+  { re: /\b(decided to|switched from|switched to|chose|migrated)\b/i, type: "decision" },
+  { re: /\b(always|never|must not|must|do not)\b/i, type: "constraint" },
+  { re: /\b(the architecture|pattern is|structure|design)\b/i, type: "architecture" },
+  { re: /\b(uses \S+ v\d+\.\d+|running on|installed)\b/i, type: "fact" },
+];
+
+function extractTextFromContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((block) => block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join(" ");
+}
+
+function splitSentences(text) {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 10);
+}
+
+export function extractDecisionsFromText(lines) {
+  const items = [];
+  const seen = new Set();
+
+  for (const line of lines) {
+    const msg = unwrap(line);
+    if (!msg || msg.role !== "assistant") continue;
+
+    const text = extractTextFromContent(msg.content);
+    if (!text) continue;
+
+    for (const sentence of splitSentences(text)) {
+      for (const { re, type } of DECISION_PATTERNS) {
+        if (!re.test(sentence)) continue;
+
+        const title = sentence.length > 100 ? sentence.slice(0, 100) + "…" : sentence;
+        const key = `${type}:${title}`;
+        if (seen.has(key)) break;
+        seen.add(key);
+
+        items.push({
+          type,
+          title,
+          content: sentence.slice(0, 500),
+          tags: [type],
+        });
+        break; // one match per sentence
+      }
+    }
+  }
+
+  return items;
+}
+
 // ── Orchestrator ─────────────────────────────────────────────────────────────
 
 export function extractAll(lines) {
@@ -267,5 +333,6 @@ export function extractAll(lines) {
     ...extractFromBashTools(lines),
     ...extractErrorResolutions(lines),
     ...extractFileChanges(lines),
+    ...extractDecisionsFromText(lines),
   ];
 }

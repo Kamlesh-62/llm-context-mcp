@@ -6,6 +6,34 @@ import process from "node:process";
 import readline from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
+type Runner = {
+  command: string;
+  args: string[];
+  label: string;
+};
+
+type CliSelection = {
+  claude: boolean;
+  gemini: boolean;
+  codex: boolean;
+};
+
+type ParsedArgs = {
+  projectRoot: string | null;
+  acceptDefaults: boolean;
+  runner: string | null;
+  customCommand: string | null;
+  customArgs: string | null;
+  cliFilters: string[] | null;
+  help: boolean;
+};
+
+type StepResult = {
+  label: string;
+  ok: boolean;
+  error?: Error;
+};
+
 const SERVER_ID = "project-memory";
 const CLI_LABELS = {
   claude: "Claude Code",
@@ -33,12 +61,13 @@ const BUILTIN_RUNNERS = {
   },
 };
 
-export async function runSetup(argv = []) {
+export async function runSetup(argv: string[] = []): Promise<number> {
   let parsedArgs;
   try {
     parsedArgs = parseArgs(argv);
   } catch (error) {
-    console.error(error.message);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
     return 1;
   }
 
@@ -54,11 +83,12 @@ export async function runSetup(argv = []) {
 
   try {
     const projectRoot = await resolveProjectRoot(rl, parsedArgs);
-    let runner;
+    let runner: Runner;
     try {
       runner = await resolveRunner(rl, parsedArgs);
     } catch (error) {
-      console.error(error.message);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(message);
       return 1;
     }
     const selection = await resolveCliSelection(rl, parsedArgs);
@@ -81,7 +111,7 @@ export async function runSetup(argv = []) {
       }
     }
 
-    const steps = [];
+    const steps: StepResult[] = [];
     if (selection.claude) {
       steps.push(
         await executeStep("Claude Code", () =>
@@ -129,8 +159,8 @@ export async function runSetup(argv = []) {
   }
 }
 
-function parseArgs(argv) {
-  const result = {
+function parseArgs(argv: string[]): ParsedArgs {
+  const result: ParsedArgs = {
     projectRoot: null,
     acceptDefaults: false,
     runner: null,
@@ -182,18 +212,18 @@ function parseArgs(argv) {
   return result;
 }
 
-function requireValue(argv, index, flag) {
+function requireValue(argv: string[], index: number, flag: string): string {
   if (index >= argv.length) {
     throw new Error(`Option ${flag} requires a value.`);
   }
   return argv[index];
 }
 
-function parseCliList(value) {
+function parseCliList(value: string): string[] {
   return mergeCliFilter(null, value.split(","));
 }
 
-function mergeCliFilter(existing, values) {
+function mergeCliFilter(existing: string[] | null, values: string[]): string[] {
   const normalized = new Set(existing ?? []);
   values.forEach((entry) => {
     const normalizedEntry = normalizeCli(entry);
@@ -202,7 +232,7 @@ function mergeCliFilter(existing, values) {
   return Array.from(normalized);
 }
 
-function normalizeCli(value) {
+function normalizeCli(value: string): string {
   const normalized = value.trim().toLowerCase();
   if (["claude", "claude-code"].includes(normalized)) {
     return "claude";
@@ -216,7 +246,7 @@ function normalizeCli(value) {
   throw new Error(`Unknown CLI "${value}". Expected one of: claude, gemini, codex.`);
 }
 
-function printHelp() {
+function printHelp(): void {
   console.log(
     [
       "Usage: project-memory-mcp setup [options]",
@@ -233,12 +263,15 @@ function printHelp() {
       "Examples:",
       "  project-memory-mcp setup",
       "  project-memory-mcp setup --cli claude,gemini --project ~/code/api",
-      '  project-memory-mcp setup --runner custom --command "node" --args "[\\"/path/server.js\\"]"',
+      '  project-memory-mcp setup --runner custom --command "node" --args "[\\"/path/dist/server.js\\"]"',
     ].join("\n"),
   );
 }
 
-async function resolveProjectRoot(rl, args) {
+async function resolveProjectRoot(
+  rl: readline.Interface,
+  args: ParsedArgs,
+): Promise<string> {
   const defaultDir = resolvePath(args.projectRoot ?? process.cwd());
 
   if (args.projectRoot || args.acceptDefaults) {
@@ -253,17 +286,18 @@ async function resolveProjectRoot(rl, args) {
       await assertDirectory(candidate);
       return candidate;
     } catch (error) {
-      console.error(`  ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`  ${message}`);
     }
   }
 }
 
-function resolvePath(input) {
+function resolvePath(input: string): string {
   const expanded = expandHome(input);
   return path.resolve(expanded);
 }
 
-function expandHome(value) {
+function expandHome(value: string): string {
   if (!value) {
     return value;
   }
@@ -276,9 +310,9 @@ function expandHome(value) {
   return value;
 }
 
-async function assertDirectory(candidate) {
+async function assertDirectory(candidate: string): Promise<void> {
   const stats = await stat(candidate).catch((error) => {
-    if (error.code === "ENOENT") {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       throw new Error(`Directory "${candidate}" does not exist.`);
     }
     throw error;
@@ -289,7 +323,7 @@ async function assertDirectory(candidate) {
   }
 }
 
-async function resolveRunner(rl, args) {
+async function resolveRunner(rl: readline.Interface, args: ParsedArgs): Promise<Runner> {
   const preselected = buildRunnerFromArgs(args);
   if (preselected) {
     return preselected;
@@ -326,7 +360,7 @@ async function resolveRunner(rl, args) {
   }
 }
 
-function buildRunnerFromArgs(args) {
+function buildRunnerFromArgs(args: ParsedArgs): Runner | null {
   if (args.runner) {
     const normalized = args.runner.toLowerCase();
     if (normalized === "custom") {
@@ -354,8 +388,8 @@ function buildRunnerFromArgs(args) {
   return null;
 }
 
-function cloneRunner(key) {
-  const base = BUILTIN_RUNNERS[key];
+function cloneRunner(key: string): Runner {
+  const base = BUILTIN_RUNNERS[key as keyof typeof BUILTIN_RUNNERS];
   if (!base) {
     throw new Error(`Unknown runner "${key}".`);
   }
@@ -366,7 +400,10 @@ function cloneRunner(key) {
   };
 }
 
-async function promptCustomRunner(rl, args) {
+async function promptCustomRunner(
+  rl: readline.Interface,
+  args: ParsedArgs,
+): Promise<Runner> {
   let command = args.customCommand;
   while (!command) {
     const answer = (await rl.question("Custom command to start the MCP server: ")).trim();
@@ -377,7 +414,7 @@ async function promptCustomRunner(rl, args) {
     }
   }
 
-  let resolvedArgs = null;
+  let resolvedArgs: string[] | null = null;
   while (resolvedArgs === null) {
     const answer =
       args.customArgs ??
@@ -392,7 +429,8 @@ async function promptCustomRunner(rl, args) {
     try {
       resolvedArgs = parseArgsInput(answer);
     } catch (error) {
-      console.error(`  ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`  ${message}`);
       resolvedArgs = null;
     }
   }
@@ -404,13 +442,13 @@ async function promptCustomRunner(rl, args) {
   };
 }
 
-function parseArgsInput(raw) {
+function parseArgsInput(raw?: string | null): string[] {
   if (!raw || !raw.trim()) {
     return [];
   }
   const trimmed = raw.trim();
   if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-    let parsed;
+    let parsed: unknown;
     try {
       parsed = JSON.parse(trimmed);
     } catch {
@@ -419,7 +457,7 @@ function parseArgsInput(raw) {
     if (!Array.isArray(parsed)) {
       throw new Error("JSON arguments must be an array.");
     }
-    return parsed.map((value) => `${value}`);
+    return (parsed as unknown[]).map((value) => `${value}`);
   }
 
   const tokens = trimmed.match(/"([^"]*)"|'([^']*)'|[^\s]+/g) ?? [];
@@ -434,7 +472,10 @@ function parseArgsInput(raw) {
   });
 }
 
-async function resolveCliSelection(rl, args) {
+async function resolveCliSelection(
+  rl: readline.Interface,
+  args: ParsedArgs,
+): Promise<CliSelection> {
   if (args.cliFilters?.length) {
     const set = new Set(args.cliFilters);
     return {
@@ -464,7 +505,12 @@ async function resolveCliSelection(rl, args) {
   }
 }
 
-async function askYesNo(rl, prompt, defaultValue, args) {
+async function askYesNo(
+  rl: readline.Interface,
+  prompt: string,
+  defaultValue: boolean,
+  args: ParsedArgs,
+): Promise<boolean> {
   if (args.acceptDefaults) {
     return defaultValue;
   }
@@ -485,7 +531,7 @@ async function askYesNo(rl, prompt, defaultValue, args) {
   return askYesNo(rl, prompt, defaultValue, args);
 }
 
-function listSelectedClis(selection) {
+function listSelectedClis(selection: CliSelection): string {
   const names = [];
   if (selection.claude) {
     names.push(CLI_LABELS.claude);
@@ -499,19 +545,26 @@ function listSelectedClis(selection) {
   return names.join(", ");
 }
 
-async function executeStep(label, task) {
+async function executeStep(label: string, task: () => Promise<void>): Promise<StepResult> {
   console.log(`\n${label}`);
   try {
     await task();
     console.log(`  ✔ ${label} configured`);
     return { label, ok: true };
   } catch (error) {
-    console.error(`  ✖ ${label} failed: ${error.message}`);
-    return { label, ok: false, error };
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error(`  ✖ ${label} failed: ${err.message}`);
+    return { label, ok: false, error: err };
   }
 }
 
-async function configureClaude({ projectRoot, runner }) {
+async function configureClaude({
+  projectRoot,
+  runner,
+}: {
+  projectRoot: string;
+  runner: Runner;
+}): Promise<void> {
   const { data, raw } = await loadJson(CLAUDE_CONFIG_PATH);
   const config = isPlainObject(data) ? data : {};
   if (!isPlainObject(config.mcpServers)) {
@@ -534,12 +587,12 @@ async function configureClaude({ projectRoot, runner }) {
   console.log(`  Updated ${CLAUDE_CONFIG_PATH}`);
 }
 
-async function loadJson(filePath) {
+async function loadJson(filePath: string): Promise<{ data: unknown; raw: string | null }> {
   try {
     const raw = await readFile(filePath, "utf8");
     return { data: JSON.parse(raw), raw };
   } catch (error) {
-    if (error.code === "ENOENT") {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { data: {}, raw: null };
     }
     if (error instanceof SyntaxError) {
@@ -549,7 +602,13 @@ async function loadJson(filePath) {
   }
 }
 
-async function configureGemini({ projectRoot, runner }) {
+async function configureGemini({
+  projectRoot,
+  runner,
+}: {
+  projectRoot: string;
+  runner: Runner;
+}): Promise<void> {
   await runCommand("gemini", ["mcp", "remove", SERVER_ID], {
     cwd: projectRoot,
     ignoreExit: true,
@@ -558,7 +617,13 @@ async function configureGemini({ projectRoot, runner }) {
   await runCommand("gemini", args, { cwd: projectRoot });
 }
 
-async function configureCodex({ projectRoot, runner }) {
+async function configureCodex({
+  projectRoot,
+  runner,
+}: {
+  projectRoot: string;
+  runner: Runner;
+}): Promise<void> {
   await runCommand("codex", ["mcp", "remove", SERVER_ID], {
     cwd: projectRoot,
     ignoreExit: true,
@@ -567,7 +632,11 @@ async function configureCodex({ projectRoot, runner }) {
   await runCommand("codex", args, { cwd: projectRoot });
 }
 
-async function runCommand(command, args, options = {}) {
+async function runCommand(
+  command: string,
+  args: string[],
+  options: { cwd?: string; ignoreExit?: boolean } = {},
+): Promise<void> {
   const { cwd, ignoreExit = false } = options;
   console.log(`  $ ${formatCommand(command, args)}`);
   return new Promise((resolve, reject) => {
@@ -578,7 +647,7 @@ async function runCommand(command, args, options = {}) {
     });
 
     child.on("error", (error) => {
-      if (error.code === "ENOENT") {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         reject(new Error(`Command "${command}" not found on PATH.`));
         return;
       }
@@ -595,7 +664,7 @@ async function runCommand(command, args, options = {}) {
   });
 }
 
-function formatCommand(command, args = []) {
+function formatCommand(command: string, args: Array<string | undefined> = []): string {
   const parts = [command, ...(args ?? [])]
     .filter((part) => part !== undefined && part !== null)
     .map((part) => part.toString());
@@ -604,6 +673,6 @@ function formatCommand(command, args = []) {
     .join(" ");
 }
 
-function isPlainObject(value) {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

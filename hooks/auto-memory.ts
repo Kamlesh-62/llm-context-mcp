@@ -9,8 +9,8 @@ import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { loadCursor, saveCursor } from "./cursor.mjs";
-import { extractAll } from "./extractors.mjs";
+import { loadCursor, saveCursor } from "./cursor.js";
+import { extractAll } from "./extractors.js";
 
 const ROOT = resolve(fileURLToPath(import.meta.url), "../..");
 const { withStore } = await import(join(ROOT, "src", "storage.js"));
@@ -21,15 +21,22 @@ const {
   validateType,
 } = await import(join(ROOT, "src", "domain.js"));
 
+type ExtractedItem = {
+  type: string;
+  title: string;
+  content: string;
+  tags?: string[];
+};
+
 // ── utility helpers ───────────────────────────────────────────────────────────
 
-async function readStdin() {
+async function readStdin(): Promise<string> {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
   return Buffer.concat(chunks).toString("utf8");
 }
 
-function parsePayload(raw) {
+function parsePayload(raw: string): Record<string, unknown> {
   if (!raw?.trim()) return {};
   try {
     return JSON.parse(raw);
@@ -38,8 +45,8 @@ function parsePayload(raw) {
   }
 }
 
-function projectDirFromPayload(payload) {
-  const cwd = payload.cwd ?? process.cwd();
+function projectDirFromPayload(payload: Record<string, unknown>): string {
+  const cwd = (payload.cwd as string | undefined) ?? process.cwd();
   return (
     process.env.CLAUDE_PROJECT_DIR ||
     process.env.GEMINI_PROJECT_DIR ||
@@ -48,11 +55,11 @@ function projectDirFromPayload(payload) {
   );
 }
 
-function titleHash(title) {
+function titleHash(title: string): string {
   return createHash("sha256").update(title).digest("hex").slice(0, 16);
 }
 
-function jaccardSimilarity(a, b) {
+function jaccardSimilarity(a: string, b: string): number {
   const setA = new Set(a.toLowerCase().split(/\s+/));
   const setB = new Set(b.toLowerCase().split(/\s+/));
   const intersection = [...setA].filter((t) => setB.has(t)).length;
@@ -60,7 +67,7 @@ function jaccardSimilarity(a, b) {
   return union === 0 ? 0 : intersection / union;
 }
 
-async function readTranscriptLines(transcriptPath) {
+async function readTranscriptLines(transcriptPath: string): Promise<any[]> {
   const raw = await readFile(transcriptPath, "utf8");
   const trimmed = raw.trim();
   if (!trimmed) return [];
@@ -86,15 +93,15 @@ async function readTranscriptLines(transcriptPath) {
   }
 }
 
-function countAssistantMessages(lines) {
+function countAssistantMessages(lines: any[]): number {
   return lines.filter((l) => l.type === "assistant" || l.message?.role === "assistant").length;
 }
 
 // ── stop handler ─────────────────────────────────────────────────────────────
 
-async function handleStop(payload) {
-  const sessionId = payload.session_id ?? "unknown";
-  const transcriptPath = payload.transcript_path;
+async function handleStop(payload: Record<string, unknown>): Promise<void> {
+  const sessionId = (payload.session_id as string | undefined) ?? "unknown";
+  const transcriptPath = payload.transcript_path as string | undefined;
   if (!transcriptPath) return;
 
   const projectDir = projectDirFromPayload(payload);
@@ -111,7 +118,7 @@ async function handleStop(payload) {
     return;
   }
 
-  const candidates = extractAll(delta);
+  const candidates = extractAll(delta) as ExtractedItem[];
   if (!candidates.length) {
     await saveCursor(cursorPath, sessionId, allLines.length - 1, cursor.itemHashes);
     return;
@@ -119,7 +126,7 @@ async function handleStop(payload) {
 
   const existingHashes = new Set(cursor.itemHashes);
   const newHashes = [...cursor.itemHashes];
-  const toSave = [];
+  const toSave: ExtractedItem[] = [];
 
   for (const item of candidates) {
     const hash = titleHash(item.title);
@@ -166,7 +173,7 @@ async function handleStop(payload) {
 
 // ── entry ────────────────────────────────────────────────────────────────────
 
-async function main() {
+async function main(): Promise<void> {
   const raw = await readStdin();
   const payload = parsePayload(raw);
   const isGemini = Boolean(process.env.GEMINI_PROJECT_DIR);

@@ -3,20 +3,19 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Project-scoped centralized memory as an MCP stdio server (JSON file backend).",
-  "main": "./server.js",
+  "main": "./dist/server.js",
   "bin": {
-    "project-memory-mcp": "./server.js"
+    "project-memory-mcp": "./dist/server.js"
   },
   "files": [
-    "src/",
-    "hooks/",
-    "server.js",
+    "dist/",
     "README.md",
     "docs/"
   ],
   "scripts": {
-    "start": "node server.js",
-    "test:hooks": "node scripts/test-hooks.mjs"
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "test:hooks": "node dist/scripts/test-hooks.js"
   },
   "keywords": [
     "mcp",
@@ -39,5 +38,9 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0"
   }
 }

@@ -9,12 +9,14 @@ import {
   nowIso,
   resolveMemoryFilePath,
 } from "./runtime.js";
+import type { Store, StoreContext, StoreWriteResult } from "./types.js";
+import type { FileHandle } from "node:fs/promises";
 
-async function ensureDirForFile(filePath) {
+async function ensureDirForFile(filePath: string): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
 }
 
-async function tryAcquireLock(lockPath) {
+async function tryAcquireLock(lockPath: string): Promise<FileHandle | null> {
   try {
     // 'wx' => create exclusively, fails if exists
     const handle = await fs.open(lockPath, "wx");
@@ -25,7 +27,7 @@ async function tryAcquireLock(lockPath) {
   }
 }
 
-async function acquireLock(lockPath) {
+async function acquireLock(lockPath: string): Promise<FileHandle> {
   const started = Date.now();
   let delay = CONFIG.lockRetryDelayMs;
 
@@ -43,7 +45,7 @@ async function acquireLock(lockPath) {
   throw new Error(`Lock timeout acquiring ${lockPath}`);
 }
 
-async function releaseLock(lockPath, handle) {
+async function releaseLock(lockPath: string, handle: FileHandle): Promise<void> {
   try {
     await handle.close();
   } catch {
@@ -56,7 +58,7 @@ async function releaseLock(lockPath, handle) {
   }
 }
 
-function emptyStore(projectRoot, memoryFilePath) {
+function emptyStore(projectRoot: string, memoryFilePath: string): Store {
   return {
     version: 1,
     project: {
@@ -72,10 +74,10 @@ function emptyStore(projectRoot, memoryFilePath) {
   };
 }
 
-async function loadStore(memoryFilePath, projectRoot) {
+async function loadStore(memoryFilePath: string, projectRoot: string): Promise<Store> {
   try {
     const raw = await fs.readFile(memoryFilePath, "utf8");
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as Store;
     if (!parsed || typeof parsed !== "object") throw new Error("Invalid JSON");
     if (parsed.version !== 1 || !Array.isArray(parsed.items) || !Array.isArray(parsed.proposals)) {
       throw new Error("Unsupported store format");
@@ -87,14 +89,17 @@ async function loadStore(memoryFilePath, projectRoot) {
   }
 }
 
-async function atomicWriteJson(filePath, obj) {
+async function atomicWriteJson(filePath: string, obj: Store): Promise<void> {
   await ensureDirForFile(filePath);
   const tmp = `${filePath}.tmp.${process.pid}.${Date.now()}`;
   await fs.writeFile(tmp, JSON.stringify(obj, null, 2), "utf8");
   await fs.rename(tmp, filePath);
 }
 
-export async function withStore(writeFn, options = {}) {
+export async function withStore(
+  writeFn: (store: Store, ctx: StoreContext) => boolean | Promise<boolean>,
+  options: { projectRoot?: string } = {},
+): Promise<StoreWriteResult> {
   const projectRoot =
     normalizeProjectRoot(options.projectRoot) || (await findProjectRoot());
   const memoryFilePath = resolveMemoryFilePath(projectRoot);

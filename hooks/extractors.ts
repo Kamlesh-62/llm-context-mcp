@@ -4,6 +4,14 @@
  * candidate memory items: { type, title, content, tags }.
  */
 
+type TranscriptLine = Record<string, any>;
+type ExtractedItem = {
+  type: string;
+  title: string;
+  content: string;
+  tags?: string[];
+};
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 const RE_VERSION = /\b(node|npm|python|pip|ruby|go|java|rustc|cargo|bun|deno|pnpm|yarn)\s+(-v|--version|version)\b/i;
@@ -20,13 +28,16 @@ const RE_CARGO_ADD = /\bcargo\s+add\s+(\S+)/;
  *   - Progress:  { type: "progress", data: { message: { type, message: { role, content } } } }
  *   - Simple:    { role, content }  (fallback)
  */
-function normalizeRole(role) {
+function normalizeRole(role: string | undefined): string | undefined {
   if (!role) return role;
   if (role === "model") return "assistant";
   return role;
 }
 
-function normalizeContent(content, parts) {
+function normalizeContent(
+  content: unknown,
+  parts: Array<{ text?: string } | string> | undefined,
+): string | any[] | null {
   if (Array.isArray(content)) return content;
   if (typeof content === "string") return content;
   if (Array.isArray(parts)) {
@@ -42,7 +53,9 @@ function normalizeContent(content, parts) {
   return null;
 }
 
-function unwrap(line) {
+function unwrap(
+  line: TranscriptLine,
+): { role: string | undefined; content: string | any[] } | null {
   // Direct message lines (type: "assistant" | "user")
   if (line.message?.role) {
     const content = normalizeContent(line.message.content, line.message.parts);
@@ -77,8 +90,8 @@ function unwrap(line) {
   return null;
 }
 
-function bashToolCalls(lines) {
-  const results = [];
+function bashToolCalls(lines: TranscriptLine[]) {
+  const results: Array<{ id: string; command: string }> = [];
   for (const line of lines) {
     const msg = unwrap(line);
     if (!msg || msg.role !== "assistant") continue;
@@ -91,8 +104,8 @@ function bashToolCalls(lines) {
   return results;
 }
 
-function toolResults(lines) {
-  const results = [];
+function toolResults(lines: TranscriptLine[]) {
+  const results: Array<{ toolUseId: string; text: string }> = [];
   for (const line of lines) {
     const msg = unwrap(line);
     if (!msg || msg.role !== "user") continue;
@@ -106,14 +119,14 @@ function toolResults(lines) {
   return results;
 }
 
-function resultForId(resultMap, id) {
+function resultForId(resultMap: Map<string, string>, id: string): string {
   return resultMap.get(id) ?? "";
 }
 
 // ── Extractor 1: Bash tool facts ─────────────────────────────────────────────
 
-export function extractFromBashTools(lines) {
-  const items = [];
+export function extractFromBashTools(lines: TranscriptLine[]): ExtractedItem[] {
+  const items: ExtractedItem[] = [];
   const calls = bashToolCalls(lines);
   const resMap = new Map();
   for (const r of toolResults(lines)) {
@@ -194,8 +207,8 @@ export function extractFromBashTools(lines) {
 
 // ── Extractor 2: Error resolutions ───────────────────────────────────────────
 
-export function extractErrorResolutions(lines) {
-  const items = [];
+export function extractErrorResolutions(lines: TranscriptLine[]): ExtractedItem[] {
+  const items: ExtractedItem[] = [];
   const calls = bashToolCalls(lines);
   const resMap = new Map();
   for (const r of toolResults(lines)) {
@@ -203,7 +216,7 @@ export function extractErrorResolutions(lines) {
   }
 
   // Track errors then look for subsequent success on similar commands
-  const errors = [];
+  const errors: Array<{ command: string; summary: string }> = [];
   for (const call of calls) {
     const output = resultForId(resMap, call.id);
     const outStr = typeof output === "string" ? output : JSON.stringify(output ?? "");
@@ -238,8 +251,8 @@ export function extractErrorResolutions(lines) {
 
 // ── Extractor 3: File change summary ─────────────────────────────────────────
 
-export function extractFileChanges(lines) {
-  const files = new Set();
+export function extractFileChanges(lines: TranscriptLine[]): ExtractedItem[] {
+  const files = new Set<string>();
 
   for (const line of lines) {
     const msg = unwrap(line);
@@ -276,7 +289,9 @@ const DECISION_PATTERNS = [
   { re: /\b(uses \S+ v\d+\.\d+|running on|installed)\b/i, type: "fact" },
 ];
 
-function extractTextFromContent(content) {
+function extractTextFromContent(
+  content: string | any[],
+): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
@@ -285,16 +300,16 @@ function extractTextFromContent(content) {
     .join(" ");
 }
 
-function splitSentences(text) {
+function splitSentences(text: string): string[] {
   return text
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 10);
 }
 
-export function extractDecisionsFromText(lines) {
-  const items = [];
-  const seen = new Set();
+export function extractDecisionsFromText(lines: TranscriptLine[]): ExtractedItem[] {
+  const items: ExtractedItem[] = [];
+  const seen = new Set<string>();
 
   for (const line of lines) {
     const msg = unwrap(line);
@@ -328,7 +343,7 @@ export function extractDecisionsFromText(lines) {
 
 // ── Orchestrator ─────────────────────────────────────────────────────────────
 
-export function extractAll(lines) {
+export function extractAll(lines: TranscriptLine[]): ExtractedItem[] {
   return [
     ...extractFromBashTools(lines),
     ...extractErrorResolutions(lines),

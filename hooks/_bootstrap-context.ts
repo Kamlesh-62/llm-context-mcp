@@ -1,6 +1,6 @@
 /**
  * One-time script to populate .ai/memory.json with project context.
- * Run: node hooks/_bootstrap-context.mjs
+ * Run: node dist/hooks/_bootstrap-context.js (after build)
  * Safe to re-run — withStore handles locking.
  */
 import { withStore } from "../src/storage.js";
@@ -12,7 +12,7 @@ const items = [
     type: "architecture",
     title: "Project overview: MCP stdio server for shared project memory",
     content:
-      "This is an MCP (Model Context Protocol) stdio server that provides shared, project-scoped memory for Claude Code, Codex CLI, and Gemini CLI. All three agents read/write to the same .ai/memory.json file. Entry point: server.js -> src/main.js. Dependencies: @modelcontextprotocol/sdk, zod. ES modules throughout.",
+      "This is an MCP (Model Context Protocol) stdio server that provides shared, project-scoped memory for Claude Code, Codex CLI, and Gemini CLI. All three agents read/write to the same .ai/memory.json file. Entry point: server.ts -> src/main.ts (compiled to dist). Dependencies: @modelcontextprotocol/sdk, zod. ES modules throughout.",
     tags: ["architecture", "overview", "mcp"],
     pin: true,
   },
@@ -20,7 +20,7 @@ const items = [
     type: "architecture",
     title: "Core storage pattern: withStore() for all writes",
     content:
-      "src/storage.js exports withStore(writeFn, opts). It acquires an exclusive file lock, loads the JSON store, calls writeFn(store, ctx), and if writeFn returns true, bumps revision and does an atomic write (tmp + rename). All writes MUST go through withStore. Never write .ai/memory.json directly.",
+      "src/storage.ts exports withStore(writeFn, opts). It acquires an exclusive file lock, loads the JSON store, calls writeFn(store, ctx), and if writeFn returns true, bumps revision and does an atomic write (tmp + rename). All writes MUST go through withStore. Never write .ai/memory.json directly.",
     tags: ["architecture", "storage", "critical"],
     pin: true,
   },
@@ -36,7 +36,7 @@ const items = [
     type: "architecture",
     title: "Key source files and their roles",
     content:
-      "server.js (entry) -> src/main.js (MCP bootstrap). src/tools.js (tool registration and handlers). src/storage.js (withStore, locking, atomic write). src/domain.js (newId, normalizeTags, validateType, tokenize, scoreItem). src/runtime.js (findProjectRoot, resolveMemoryFilePath, nowIso). src/config.js (constants, ALLOWED_TYPES). src/logger.js (stderr logger).",
+      "server.ts (entry) -> src/main.ts (MCP bootstrap). src/tools.ts (tool registration and handlers). src/storage.ts (withStore, locking, atomic write). src/domain.ts (newId, normalizeTags, validateType, tokenize, scoreItem). src/runtime.ts (findProjectRoot, resolveMemoryFilePath, nowIso). src/config.ts (constants, ALLOWED_TYPES). src/logger.ts (stderr logger).",
     tags: ["architecture", "file-layout"],
     pin: true,
   },
@@ -60,7 +60,7 @@ const items = [
     type: "architecture",
     title: "Auto-save hook system in hooks/ directory",
     content:
-      "hooks/auto-save.mjs is a Claude Code Stop hook that auto-captures memory from session transcripts using heuristics (no LLM calls). hooks/extractors.mjs has 5 extractors: version facts, commit messages, dependency installs, error resolutions, file changes. hooks/cursor.mjs tracks processed lines. Config in .claude/settings.json. Items saved with source: auto-hook.",
+      "hooks/auto-save.ts is a Claude Code Stop hook that auto-captures memory from session transcripts using heuristics (no LLM calls). hooks/extractors.ts has 5 extractors: version facts, commit messages, dependency installs, error resolutions, file changes. hooks/cursor.ts tracks processed lines. Config in .claude/settings.json. Items saved with source: auto-hook.",
     tags: ["hooks", "auto-save", "architecture"],
     pin: true,
   },
@@ -68,7 +68,7 @@ const items = [
     type: "constraint",
     title: "ES modules only, no CommonJS",
     content:
-      "package.json has type: module. All files use import/export. Hook files use .mjs extension. Do not use require() or module.exports anywhere.",
+      "package.json has type: module. All files use import/export. Source is TypeScript and compiles to ESM JavaScript in dist/. Do not use require() or module.exports anywhere.",
     tags: ["constraint", "modules"],
     pin: false,
   },

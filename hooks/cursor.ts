@@ -3,10 +3,17 @@ import { dirname } from "node:path";
 
 const DEFAULTS = { sessionId: null, lastLineIndex: -1, itemHashes: [], updatedAt: null };
 
-export async function loadCursor(cursorPath, sessionId) {
+export async function loadCursor(
+  cursorPath: string,
+  sessionId: string,
+): Promise<{ lastLineIndex: number; itemHashes: string[] }> {
   try {
     const raw = await readFile(cursorPath, "utf8");
-    const data = JSON.parse(raw);
+    const data = JSON.parse(raw) as {
+      sessionId?: string;
+      lastLineIndex?: number;
+      itemHashes?: string[];
+    };
 
     // Reset line index when session changes, but keep hashes for cross-session dedup
     if (data.sessionId !== sessionId) {
@@ -21,7 +28,12 @@ export async function loadCursor(cursorPath, sessionId) {
   }
 }
 
-export async function saveCursor(cursorPath, sessionId, lastLineIndex, itemHashes) {
+export async function saveCursor(
+  cursorPath: string,
+  sessionId: string,
+  lastLineIndex: number,
+  itemHashes: string[],
+): Promise<void> {
   const trimmed = itemHashes.slice(-200);
   const data = {
     sessionId,

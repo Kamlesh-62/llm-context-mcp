@@ -1,11 +1,11 @@
 {
   "name": "project-memory-mcp",
-  "version": "0.1.1",
+  "version": "0.1.4",
   "type": "module",
   "description": "Project-scoped centralized memory as an MCP stdio server (JSON file backend).",
   "main": "./dist/server.js",
   "bin": {
-    "project-memory-mcp": "./dist/server.js"
+    "project-memory-mcp": "dist/server.js"
   },
   "files": [
     "dist/",
@@ -35,7 +35,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Kamlesh-62/llm-context-mcp.git"
+    "url": "git+https://github.com/Kamlesh-62/llm-context-mcp.git"
   },
   "engines": {
     "node": ">=18.0.0"

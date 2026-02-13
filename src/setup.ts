@@ -40,7 +40,11 @@ const CLI_LABELS = {
   gemini: "Gemini CLI",
   codex: "Codex CLI",
 };
-const CLAUDE_CONFIG_PATH = path.join(homedir(), ".claude.json");
+const CLAUDE_CONFIG_OVERRIDE =
+  process.env.PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH ?? process.env.CLAUDE_CONFIG_PATH ?? null;
+const CLAUDE_CONFIG_PATH = CLAUDE_CONFIG_OVERRIDE
+  ? resolvePath(CLAUDE_CONFIG_OVERRIDE)
+  : path.join(homedir(), ".claude.json");
 const SERVER_ENTRY_PATH = fileURLToPath(new URL("../server.js", import.meta.url));
 
 const BUILTIN_RUNNERS = {

@@ -57,6 +57,8 @@ The server auto-detects project root, but you can override behavior with env var
 |---|---|
 | `MEMORY_PROJECT_ROOT` | Force the project root path (overrides `.git` detection + cwd) |
 | `MEMORY_FILE_PATH` | Override memory JSON path (relative paths resolve under project root) |
+| `PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH` | Point the setup wizard at a custom Claude config file (useful in sandboxes/CI) |
+| `CLAUDE_CONFIG_PATH` | Same override as above, kept for compatibility; only used if the project-specific variable is unset |
 
 Example manual start (for debugging):
 
@@ -64,6 +66,10 @@ Example manual start (for debugging):
 MEMORY_PROJECT_ROOT=/Users/.../repo \
 MEMORY_FILE_PATH=.ai/custom-memory.json \
 node dist/server.js
+
+# Use a repo-local Claude config file instead of ~/.claude.json
+PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH=.tmp/claude-test.json \
+  npx project-memory-mcp setup --claude
 ```
 
 ## 4. Guided setup command (recommended)
@@ -146,6 +152,8 @@ Edit `~/.claude.json` and add/merge this under the matching project block:
 ```
 
 Restart Claude CLI from that project folder so it resolves the correct working directory. Optional auto-save hook: keep `.claude/settings.json` from this repo inside your project.
+
+> **Read-only home directories**: export `PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH=/path/to/override.json` (or `CLAUDE_CONFIG_PATH`) before running `project-memory-mcp setup --claude`. The wizard will read/write that custom file instead of `~/.claude.json` and still drop a `.bak` next to it.
 
 ### Gemini CLI
 

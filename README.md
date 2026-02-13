@@ -91,7 +91,8 @@ Working out of this repo?
 3. `npm run test:hooks` (optional smoke test for hook flows)
 4. Wire your CLIs using `node dist/server.js` or `project-memory-mcp` (after linking via `npm link`)
 
-See [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md) for the long-form guide, env overrides, troubleshooting, and hook wiring defaults.
+See [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md) for the long-form guide, env overrides, troubleshooting, and hook wiring defaults.  
+Need to ship a new npm release from your workstation? Follow [`docs/LOCAL_NPM_DEPLOY.md`](docs/LOCAL_NPM_DEPLOY.md).
 
 ## CLI Setup & Tool Map
 
@@ -141,6 +142,8 @@ That's the core loop: **get bundle → do work → save what matters**.
    - Automatically updates `~/.claude.json` (with a `.bak` backup) and runs the necessary `gemini mcp` / `codex mcp` commands so they point at the right project.
    - Flags: `--project /path`, `--cli claude,gemini`, `--runner global`, `--yes`, `--command`, and `--args` let you script it or skip prompts. Run `project-memory-mcp setup --help` for the full list.
    - Requires the corresponding CLIs to already be installed and on your `PATH`.
+
+   > Claude setup in sandboxes: set `PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH=/custom/path/claude.json` (or `CLAUDE_CONFIG_PATH`) before running the wizard if `~/.claude.json` isn’t writeable. The wizard reads/writes that custom file and still produces a `.bak` alongside it.
 
    <details>
    <summary>Prefer the fully manual wiring? Expand for the original commands.</summary>
@@ -333,9 +336,14 @@ There is no `memory_update` or `memory_delete` tool yet.
 |---|---|
 | `MEMORY_PROJECT_ROOT` | Force a specific project root |
 | `MEMORY_FILE_PATH` | Override the memory file path (relative resolves from project root) |
+| `PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH` | Override where the setup wizard reads/writes Claude’s config (defaults to `~/.claude.json`) |
+| `CLAUDE_CONFIG_PATH` | Same as above, kept for compatibility; only used if the project-specific variable is unset |
 
 ```bash
 MEMORY_PROJECT_ROOT=/path/to/project npm run start
+# Point setup at a sandbox-friendly Claude config file
+PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH=.tmp/claude-test.json \
+  npx project-memory-mcp setup --claude
 ```
 
 </details>

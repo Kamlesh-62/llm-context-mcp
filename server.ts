@@ -4,12 +4,24 @@
  */
 
 import process from "node:process";
+import { createRequire } from "node:module";
 import { main } from "./src/main.js";
 import { log } from "./src/logger.js";
+
+const require = createRequire(import.meta.url);
+const { version: PACKAGE_VERSION } = require("../package.json") as {
+  version: string;
+};
+const VERSION_FLAGS = new Set(["--version", "-v", "version", "-V"]);
 
 async function run(): Promise<void> {
   const [, , rawCommand] = process.argv;
   const command = rawCommand?.toLowerCase();
+
+  if (command && VERSION_FLAGS.has(command)) {
+    console.log(PACKAGE_VERSION);
+    return;
+  }
 
   if (!command || command === "serve") {
     await main();

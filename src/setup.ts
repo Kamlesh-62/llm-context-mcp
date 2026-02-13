@@ -6,10 +6,24 @@ import process from "node:process";
 import readline from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
+type RunnerKey = keyof typeof BUILTIN_RUNNERS | "custom";
+
 type Runner = {
   command: string;
   args: string[];
   label: string;
+  key: RunnerKey;
+};
+
+type SavedRunner = {
+  key: RunnerKey;
+  command: string;
+  args: string[];
+};
+
+type ProjectDefaults = {
+  serverId?: string;
+  runner?: SavedRunner;
 };
 
 type CliSelection = {
@@ -20,6 +34,7 @@ type CliSelection = {
 
 type ParsedArgs = {
   projectRoot: string | null;
+  serverId: string | null;
   acceptDefaults: boolean;
   runner: string | null;
   customCommand: string | null;
@@ -34,7 +49,7 @@ type StepResult = {
   error?: Error;
 };
 
-const SERVER_ID = "project-memory";
+const SERVER_ID_PATTERN = /^[a-z0-9-]{3,32}$/;
 const CLI_LABELS = {
   claude: "Claude Code",
   gemini: "Gemini CLI",
@@ -46,6 +61,7 @@ const CLAUDE_CONFIG_PATH = CLAUDE_CONFIG_OVERRIDE
   ? resolvePath(CLAUDE_CONFIG_OVERRIDE)
   : path.join(homedir(), ".claude.json");
 const SERVER_ENTRY_PATH = fileURLToPath(new URL("../server.js", import.meta.url));
+const PROJECT_CONFIG_FILENAME = "memory-mcp.json";
 
 const BUILTIN_RUNNERS = {
   npx: {
@@ -87,9 +103,18 @@ export async function runSetup(argv: string[] = []): Promise<number> {
 
   try {
     const projectRoot = await resolveProjectRoot(rl, parsedArgs);
+    const projectDefaults = await loadProjectDefaults(projectRoot);
+    let serverId: string;
+    try {
+      serverId = await resolveServerId(rl, parsedArgs, projectRoot, projectDefaults);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(message);
+      return 1;
+    }
     let runner: Runner;
     try {
-      runner = await resolveRunner(rl, parsedArgs);
+      runner = await resolveRunner(rl, parsedArgs, projectDefaults.runner);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(message);
@@ -104,6 +129,7 @@ export async function runSetup(argv: string[] = []): Promise<number> {
 
     console.log("\nConfiguration preview:");
     console.log(`  Project root: ${projectRoot}`);
+    console.log(`  Server ID: ${serverId}`);
     console.log(`  Server command: ${formatCommand(runner.command, runner.args)}`);
     console.log(`  Target CLIs: ${listSelectedClis(selection)}`);
 
@@ -115,6 +141,12 @@ export async function runSetup(argv: string[] = []): Promise<number> {
       }
     }
 
+    await saveProjectDefaults(projectRoot, {
+      ...projectDefaults,
+      serverId,
+      runner: snapshotRunner(runner),
+    });
+
     const steps: StepResult[] = [];
     if (selection.claude) {
       steps.push(
@@ -122,6 +154,7 @@ export async function runSetup(argv: string[] = []): Promise<number> {
           configureClaude({
             projectRoot,
             runner,
+            serverId,
           }),
         ),
       );
@@ -132,6 +165,7 @@ export async function runSetup(argv: string[] = []): Promise<number> {
           configureGemini({
             projectRoot,
             runner,
+            serverId,
           }),
         ),
       );
@@ -142,6 +176,7 @@ export async function runSetup(argv: string[] = []): Promise<number> {
           configureCodex({
             projectRoot,
             runner,
+            serverId,
           }),
         ),
       );
@@ -166,6 +201,7 @@ export async function runSetup(argv: string[] = []): Promise<number> {
 function parseArgs(argv: string[]): ParsedArgs {
   const result: ParsedArgs = {
     projectRoot: null,
+    serverId: null,
     acceptDefaults: false,
     runner: null,
     customCommand: null,
@@ -180,6 +216,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--project":
       case "--cwd":
         result.projectRoot = requireValue(argv, ++i, token);
+        break;
+      case "--server-id":
+        result.serverId = requireValue(argv, ++i, token);
         break;
       case "--cli":
         result.cliFilters = parseCliList(requireValue(argv, ++i, token));
@@ -257,6 +296,7 @@ function printHelp(): void {
       "",
       "Options:",
       "  --project <path>     Project directory to bind the MCP server to.",
+      "  --server-id <name>   Friendly server ID (a-z0-9-, 3-32 chars).",
       "  --cli <list>         Comma-separated subset of CLIs (claude,gemini,codex).",
       "  --runner <type>      npx | global | node | custom.",
       "  --command <value>    Custom command (required when --runner custom).",
@@ -296,6 +336,86 @@ async function resolveProjectRoot(
   }
 }
 
+async function loadProjectDefaults(projectRoot: string): Promise<ProjectDefaults> {
+  const filePath = getProjectConfigPath(projectRoot);
+  try {
+    const raw = await readFile(filePath, "utf8");
+    const data = JSON.parse(raw);
+    if (!isPlainObject(data)) {
+      return {};
+    }
+    const defaults: ProjectDefaults = {};
+    if (typeof data.serverId === "string" && SERVER_ID_PATTERN.test(data.serverId)) {
+      defaults.serverId = data.serverId;
+    }
+    if (data.runner) {
+      const runner = normalizeSavedRunner(data.runner);
+      if (runner) {
+        defaults.runner = runner;
+      }
+    }
+    return defaults;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return {};
+    }
+    if (error instanceof SyntaxError) {
+      throw new Error(`Cannot parse ${filePath}: ${error.message}`);
+    }
+    throw error;
+  }
+}
+
+async function saveProjectDefaults(
+  projectRoot: string,
+  defaults: ProjectDefaults,
+): Promise<void> {
+  const filePath = getProjectConfigPath(projectRoot);
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(defaults, null, 2)}\n`);
+}
+
+function getProjectConfigPath(projectRoot: string): string {
+  return path.join(projectRoot, ".ai", PROJECT_CONFIG_FILENAME);
+}
+
+async function resolveServerId(
+  rl: readline.Interface,
+  args: ParsedArgs,
+  projectRoot: string,
+  defaults: ProjectDefaults,
+): Promise<string> {
+  if (args.serverId) {
+    return validateServerId(args.serverId);
+  }
+
+  const fallback = defaults.serverId ?? suggestServerId(projectRoot);
+  if (args.acceptDefaults) {
+    if (fallback) {
+      return fallback;
+    }
+    throw new Error(
+      "Server ID is required when running non-interactively. Pass --server-id <name> or rerun without --yes.",
+    );
+  }
+
+  while (true) {
+    const suffix = fallback ? ` [${fallback}]` : "";
+    const answer = (await rl.question(`Server ID${suffix}: `)).trim();
+    const candidate = answer || fallback;
+    if (!candidate) {
+      console.log("  Please enter a server ID (a-z0-9-, length 3-32).");
+      continue;
+    }
+    try {
+      return validateServerId(candidate);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`  ${message}`);
+    }
+  }
+}
+
 function resolvePath(input: string): string {
   const expanded = expandHome(input);
   return path.resolve(expanded);
@@ -327,21 +447,34 @@ async function assertDirectory(candidate: string): Promise<void> {
   }
 }
 
-async function resolveRunner(rl: readline.Interface, args: ParsedArgs): Promise<Runner> {
+async function resolveRunner(
+  rl: readline.Interface,
+  args: ParsedArgs,
+  savedRunner?: SavedRunner,
+): Promise<Runner> {
   const preselected = buildRunnerFromArgs(args);
   if (preselected) {
     return preselected;
   }
+  const restored = restoreSavedRunner(savedRunner);
   if (args.acceptDefaults) {
-    return cloneRunner("npx");
+    return restored ?? cloneRunner("npx");
   }
 
-  const choices = [
+  const choices: Array<{ index: string; key: RunnerKey; label: string }> = [
     { index: "1", key: "npx", label: BUILTIN_RUNNERS.npx.label },
     { index: "2", key: "global", label: BUILTIN_RUNNERS.global.label },
     { index: "3", key: "node", label: BUILTIN_RUNNERS.node.label },
     { index: "4", key: "custom", label: "Provide a custom command" },
   ];
+  const defaultChoice =
+    restored?.key === "global"
+      ? "2"
+      : restored?.key === "node"
+        ? "3"
+        : restored?.key === "custom"
+          ? "4"
+          : "1";
 
   while (true) {
     console.log("\nHow should we launch the MCP server?");
@@ -349,7 +482,8 @@ async function resolveRunner(rl: readline.Interface, args: ParsedArgs): Promise<
       console.log(`  ${choice.index}) ${choice.label}`);
     });
 
-    const answer = (await rl.question("Select an option [1]: ")).trim() || "1";
+    const answer =
+      (await rl.question(`Select an option [${defaultChoice}]: `)).trim() || defaultChoice;
     const choice = choices.find((entry) => entry.index === answer);
     if (!choice) {
       console.log("  Invalid selection. Try again.");
@@ -357,7 +491,11 @@ async function resolveRunner(rl: readline.Interface, args: ParsedArgs): Promise<
     }
 
     if (choice.key === "custom") {
-      return await promptCustomRunner(rl, args);
+      return await promptCustomRunner(
+        rl,
+        args,
+        restored?.key === "custom" ? restored : null,
+      );
     }
 
     return cloneRunner(choice.key);
@@ -371,28 +509,19 @@ function buildRunnerFromArgs(args: ParsedArgs): Runner | null {
       if (!args.customCommand) {
         throw new Error("Custom runner requires --command.");
       }
-      const parsedArgs = parseArgsInput(args.customArgs);
-      return {
-        command: args.customCommand,
-        args: parsedArgs,
-        label: "Custom command",
-      };
+      return createCustomRunner(args.customCommand, parseArgsInput(args.customArgs));
     }
-    return cloneRunner(normalized);
+    return cloneRunner(normalized as RunnerKey);
   }
 
   if (args.customCommand) {
-    return {
-      command: args.customCommand,
-      args: parseArgsInput(args.customArgs),
-      label: "Custom command",
-    };
+    return createCustomRunner(args.customCommand, parseArgsInput(args.customArgs));
   }
 
   return null;
 }
 
-function cloneRunner(key: string): Runner {
+function cloneRunner(key: RunnerKey): Runner {
   const base = BUILTIN_RUNNERS[key as keyof typeof BUILTIN_RUNNERS];
   if (!base) {
     throw new Error(`Unknown runner "${key}".`);
@@ -401,33 +530,42 @@ function cloneRunner(key: string): Runner {
     command: base.command,
     args: [...base.args],
     label: base.label,
+    key,
   };
 }
 
 async function promptCustomRunner(
   rl: readline.Interface,
   args: ParsedArgs,
+  previous?: Runner | null,
 ): Promise<Runner> {
-  let command = args.customCommand;
+  let command = args.customCommand ?? previous?.command ?? null;
   while (!command) {
-    const answer = (await rl.question("Custom command to start the MCP server: ")).trim();
+    const suffix = previous?.command ? ` [${previous.command}]` : "";
+    const answer = (await rl.question(`Custom command to start the MCP server${suffix}: `)).trim();
     if (answer) {
       command = answer;
-    } else {
-      console.log("  Command is required.");
+      break;
     }
+    if (!answer && previous?.command) {
+      command = previous.command;
+      break;
+    }
+    console.log("  Command is required.");
   }
 
   let resolvedArgs: string[] | null = null;
   while (resolvedArgs === null) {
+    const defaultArgs =
+      previous?.args && previous.args.length ? ` [${previous.args.join(" ")}]` : "";
     const answer =
       args.customArgs ??
       (await rl.question(
-        "Arguments (JSON array or space separated, leave blank for none): ",
+        `Arguments (JSON array or space separated, leave blank for none)${defaultArgs}: `,
       ));
     args.customArgs = null;
     if (!answer.trim()) {
-      resolvedArgs = [];
+      resolvedArgs = previous?.args ? [...previous.args] : [];
       break;
     }
     try {
@@ -439,10 +577,15 @@ async function promptCustomRunner(
     }
   }
 
+  return createCustomRunner(command, resolvedArgs);
+}
+
+function createCustomRunner(command: string, args: string[]): Runner {
   return {
     command,
-    args: resolvedArgs,
+    args: [...args],
     label: "Custom command",
+    key: "custom",
   };
 }
 
@@ -565,9 +708,11 @@ async function executeStep(label: string, task: () => Promise<void>): Promise<St
 async function configureClaude({
   projectRoot,
   runner,
+  serverId,
 }: {
   projectRoot: string;
   runner: Runner;
+  serverId: string;
 }): Promise<void> {
   const { data, raw } = await loadJson(CLAUDE_CONFIG_PATH);
   const config = isPlainObject(data) ? data : {};
@@ -575,7 +720,7 @@ async function configureClaude({
     config.mcpServers = {};
   }
 
-  config.mcpServers[SERVER_ID] = {
+  config.mcpServers[serverId] = {
     command: runner.command,
     args: runner.args,
     cwd: projectRoot,
@@ -609,30 +754,34 @@ async function loadJson(filePath: string): Promise<{ data: unknown; raw: string 
 async function configureGemini({
   projectRoot,
   runner,
+  serverId,
 }: {
   projectRoot: string;
   runner: Runner;
+  serverId: string;
 }): Promise<void> {
-  await runCommand("gemini", ["mcp", "remove", SERVER_ID], {
+  await runCommand("gemini", ["mcp", "remove", serverId], {
     cwd: projectRoot,
     ignoreExit: true,
   });
-  const args = ["mcp", "add", SERVER_ID, runner.command, ...runner.args, "--trust"];
+  const args = ["mcp", "add", serverId, runner.command, ...runner.args, "--trust"];
   await runCommand("gemini", args, { cwd: projectRoot });
 }
 
 async function configureCodex({
   projectRoot,
   runner,
+  serverId,
 }: {
   projectRoot: string;
   runner: Runner;
+  serverId: string;
 }): Promise<void> {
-  await runCommand("codex", ["mcp", "remove", SERVER_ID], {
+  await runCommand("codex", ["mcp", "remove", serverId], {
     cwd: projectRoot,
     ignoreExit: true,
   });
-  const args = ["mcp", "add", SERVER_ID, runner.command, ...runner.args];
+  const args = ["mcp", "add", serverId, runner.command, ...runner.args];
   await runCommand("codex", args, { cwd: projectRoot });
 }
 
@@ -675,6 +824,63 @@ function formatCommand(command: string, args: Array<string | undefined> = []): s
   return parts
     .map((part) => (/\s/.test(part) ? `"${part}"` : part))
     .join(" ");
+}
+
+function snapshotRunner(runner: Runner): SavedRunner {
+  return {
+    key: runner.key,
+    command: runner.command,
+    args: [...runner.args],
+  };
+}
+
+function normalizeSavedRunner(value: unknown): SavedRunner | undefined {
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+  const key =
+    typeof value.key === "string" && isValidRunnerKey(value.key) ? (value.key as RunnerKey) : undefined;
+  const command = typeof value.command === "string" ? value.command : undefined;
+  const args =
+    Array.isArray(value.args) && value.args.every((entry) => typeof entry === "string")
+      ? (value.args as string[])
+      : undefined;
+  if (!key || !command || !args) {
+    return undefined;
+  }
+  return { key, command, args };
+}
+
+function restoreSavedRunner(saved?: SavedRunner): Runner | null {
+  if (!saved || !isValidRunnerKey(saved.key)) {
+    return null;
+  }
+  if (saved.key === "custom") {
+    return createCustomRunner(saved.command, [...saved.args]);
+  }
+  return cloneRunner(saved.key);
+}
+
+function isValidRunnerKey(value: string): value is RunnerKey {
+  return value === "custom" || Object.prototype.hasOwnProperty.call(BUILTIN_RUNNERS, value);
+}
+
+function validateServerId(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (!SERVER_ID_PATTERN.test(normalized)) {
+    throw new Error("Server ID must be 3-32 chars using lowercase letters, numbers, or hyphens.");
+  }
+  return normalized;
+}
+
+function suggestServerId(projectRoot: string): string | null {
+  const fallback = path.basename(projectRoot).toLowerCase();
+  const normalized = fallback.replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+  const truncated = normalized.slice(0, 32);
+  if (SERVER_ID_PATTERN.test(truncated)) {
+    return truncated;
+  }
+  return null;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

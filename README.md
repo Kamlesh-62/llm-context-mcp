@@ -136,11 +136,12 @@ That's the core loop: **get bundle → do work → save what matters**.
    # or, after a global install:
    project-memory-mcp setup
    ```
+   - Prompts for a **server ID** (e.g., `project-memory-npx`). IDs must match `[a-z0-9-]{3,32}`; provide `--server-id <name>` when scripting or running with `--yes`.
    - Prompts for the project directory (defaults to your current working folder).
    - Lets you choose how to launch the MCP server (`npx`, global binary, `node /path/to/dist/server.js`, or a custom command).
    - Lets you pick which CLIs to configure (Claude Code, Gemini CLI, Codex CLI).
    - Automatically updates `~/.claude.json` (with a `.bak` backup) and runs the necessary `gemini mcp` / `codex mcp` commands so they point at the right project.
-   - Flags: `--project /path`, `--cli claude,gemini`, `--runner global`, `--yes`, `--command`, and `--args` let you script it or skip prompts. Run `project-memory-mcp setup --help` for the full list.
+   - Flags: `--project /path`, `--server-id my-server-name`, `--cli claude,gemini`, `--runner global`, `--yes`, `--command`, and `--args` let you script it or skip prompts. Run `project-memory-mcp setup --help` for the full list.
    - Requires the corresponding CLIs to already be installed and on your `PATH`.
 
    > Claude setup in sandboxes: set `PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH=/custom/path/claude.json` (or `CLAUDE_CONFIG_PATH`) before running the wizard if `~/.claude.json` isn’t writeable. The wizard reads/writes that custom file and still produces a `.bak` alongside it.
@@ -180,7 +181,9 @@ That's the core loop: **get bundle → do work → save what matters**.
    - In that project, ask your CLI to `Call memory_status and show the output.` You should see `projectRoot` = `/path/to/my-app` and `memoryFilePath` = `/path/to/my-app/.ai/memory.json`. If not, fix the MCP config (`cwd`, env vars, etc.) before continuing.
    - Need a reminder of commands? Run `memory_help` anytime for the cheat sheet.
 
-> Prefer the long-form guide (env overrides, troubleshooting, auto hooks)? See `docs/LOCAL_SETUP.md`.
+   The wizard remembers your last choices inside `<project>/.ai/memory-mcp.json`, so future runs can pre-fill the same server ID and runner. Remove that file if you want to start from scratch.
+
+   > Prefer the long-form guide (env overrides, troubleshooting, auto hooks)? See `docs/LOCAL_SETUP.md`.
 
 ---
 

@@ -84,11 +84,13 @@ project-memory-mcp setup
 
 What it does:
 
+- Prompts for a server ID (defaults to the slugified repo folder). IDs must match `[a-z0-9-]{3,32}`; supply `--server-id <name>` when running with `--yes`/`--project`.
 - Prompts for the project directory (defaults to your current working directory).
 - Lets you pick how the server should be launched (`npx project-memory-mcp`, global binary, `node /absolute/path/dist/server.js`, or a fully custom command/args).
 - Lets you choose which CLIs to configure (Claude Code, Gemini CLI, Codex CLI).
 - Updates `~/.claude.json` (with a `.bak` backup), then runs `gemini mcp` / `codex mcp` commands so they point to the right repo. Each CLI must already be installed and available on your `PATH`.
-- Supports automation via flags such as `--project`, `--cli claude,gemini`, `--runner global`, `--command`, `--args`, and `--yes` to skip prompts. Run `project-memory-mcp setup --help` for the full list.
+- Supports automation via flags such as `--project`, `--server-id my-server-name`, `--cli claude,gemini`, `--runner global`, `--command`, `--args`, and `--yes` to skip prompts. Run `project-memory-mcp setup --help` for the full list.
+- Stores your choices in `<project>/.ai/memory-mcp.json` so subsequent runs can reuse the same server ID + runner. Delete that file to force a fresh prompt.
 
 You can re-run the wizard anytime; it safely overwrites the `project-memory` entries with your latest choices.
 

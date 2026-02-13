@@ -3,11 +3,11 @@ import path from "node:path";
 
 import { CONFIG } from "./config.js";
 
-export function nowIso() {
+export function nowIso(): string {
   return new Date().toISOString();
 }
 
-export function normalizeProjectRoot(projectRoot) {
+export function normalizeProjectRoot(projectRoot?: string | null): string {
   if (typeof projectRoot !== "string") return "";
   const trimmed = projectRoot.trim();
   return trimmed ? path.resolve(trimmed) : "";
@@ -20,7 +20,7 @@ export function normalizeProjectRoot(projectRoot) {
  *  2) nearest ancestor containing ".git" directory
  *  3) current working directory
  */
-export async function findProjectRoot() {
+export async function findProjectRoot(): Promise<string> {
   const explicit = process.env.MEMORY_PROJECT_ROOT;
   if (explicit && explicit.trim()) return path.resolve(explicit.trim());
 
@@ -41,7 +41,7 @@ export async function findProjectRoot() {
   }
 }
 
-export function resolveMemoryFilePath(projectRoot) {
+export function resolveMemoryFilePath(projectRoot: string): string {
   const envPath = process.env.MEMORY_FILE_PATH;
   if (envPath && envPath.trim()) {
     // If relative, resolve relative to projectRoot (so configs can stay portable).

@@ -14,15 +14,15 @@ const TRANSCRIPT = join(TMP_DIR, "pm-hook-test.jsonl");
 const CURSOR = join(ROOT, ".ai", ".auto-save-cursor.json");
 const MEMORY = join(ROOT, ".ai", "memory.json");
 
-function now() {
+function now(): string {
   return new Date().toISOString();
 }
 
-async function ensureAiDir() {
+async function ensureAiDir(): Promise<void> {
   await mkdir(join(ROOT, ".ai"), { recursive: true });
 }
 
-async function writeTranscript() {
+async function writeTranscript(): Promise<void> {
   const lines = [
     {
       type: "assistant",
@@ -44,17 +44,21 @@ async function writeTranscript() {
   await writeFile(TRANSCRIPT, raw);
 }
 
-async function readMemory() {
+async function readMemory(): Promise<any> {
   const raw = await readFile(MEMORY, "utf8");
   return JSON.parse(raw);
 }
 
-async function readCursor() {
+async function readCursor(): Promise<any> {
   const raw = await readFile(CURSOR, "utf8");
   return JSON.parse(raw);
 }
 
-function runNode(scriptPath, input, env = {}) {
+function runNode(
+  scriptPath: string,
+  input: string,
+  env: Record<string, string> = {},
+): Promise<{ code: number | null; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn("node", [scriptPath], {
       stdio: ["pipe", "pipe", "pipe"],
@@ -68,44 +72,44 @@ function runNode(scriptPath, input, env = {}) {
   });
 }
 
-async function runClaude() {
+async function runClaude(): Promise<{ code: number | null; stderr: string }> {
   const payload = JSON.stringify({
     session_id: `claude-test-${now()}`,
     transcript_path: TRANSCRIPT,
     cwd: ROOT,
   });
-  return runNode(join(ROOT, "hooks", "auto-save.mjs"), payload, {
+  return runNode(join(ROOT, "dist", "hooks", "auto-save.js"), payload, {
     CLAUDE_PROJECT_DIR: ROOT,
   });
 }
 
-async function runGemini() {
+async function runGemini(): Promise<{ code: number | null; stderr: string }> {
   const payload = JSON.stringify({
     session_id: `gemini-test-${now()}`,
     transcript_path: TRANSCRIPT,
     cwd: ROOT,
   });
-  return runNode(join(ROOT, "hooks", "auto-save.mjs"), payload, {
+  return runNode(join(ROOT, "dist", "hooks", "auto-save.js"), payload, {
     GEMINI_PROJECT_DIR: ROOT,
   });
 }
 
-async function runCodex() {
+async function runCodex(): Promise<{ code: number | null; stderr: string }> {
   const payload = JSON.stringify({
     session_id: `codex-test-${now()}`,
     cwd: ROOT,
     history_path: TRANSCRIPT,
   });
-  return runNode(join(ROOT, "hooks", "codex-notify.mjs"), payload);
+  return runNode(join(ROOT, "dist", "hooks", "codex-notify.js"), payload);
 }
 
-function printResult(name, ok, details = "") {
+function printResult(name: string, ok: boolean, details = ""): void {
   const status = ok ? "PASS" : "FAIL";
   const line = `${status} ${name}${details ? ` - ${details}` : ""}`;
   process.stdout.write(line + "\n");
 }
 
-async function main() {
+async function main(): Promise<void> {
   await ensureAiDir();
   await writeTranscript();
 

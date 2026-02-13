@@ -19,7 +19,7 @@ npx project-memory-mcp
 
 # Or clone and run locally
 git clone https://github.com/nicobailon/project-memory-mcp-js.git
-cd project-memory-mcp-js && npm install && npm start
+cd project-memory-mcp-js && npm install && npm run build && npm start
 ```
 
 | What you want | Tool to call |
@@ -49,7 +49,7 @@ That's the core loop: **get bundle → do work → save what matters**.
    project-memory-mcp setup
    ```
    - Prompts for the project directory (defaults to your current working folder).
-   - Lets you choose how to launch the MCP server (`npx`, global binary, `node /path/to/server.js`, or a custom command).
+   - Lets you choose how to launch the MCP server (`npx`, global binary, `node /path/to/dist/server.js`, or a custom command).
    - Lets you pick which CLIs to configure (Claude Code, Gemini CLI, Codex CLI).
    - Automatically updates `~/.claude.json` (with a `.bak` backup) and runs the necessary `gemini mcp` / `codex mcp` commands so they point at the right project.
    - Flags: `--project /path`, `--cli claude,gemini`, `--runner global`, `--yes`, `--command`, and `--args` let you script it or skip prompts. Run `project-memory-mcp setup --help` for the full list.
@@ -132,7 +132,7 @@ Call `memory_get_bundle` with prompt "I am fixing login API bugs" and maxItems 1
 - The server automatically compacts when more than **400** active items exist (see `CONFIG.autoCompact`). Oldest entries are moved to `.ai/memory-archive.json`, and a summary note is added so you still know what was archived.
 - To trigger compaction manually (or tune thresholds per project), call `memory_compact` and provide overrides such as `{ "maxItems": 250 }`.
 - Archived content stays available for future manual review—`memory_get_bundle` only surfaces the most relevant active notes while summaries keep the historical trail discoverable.
-- Want zero-click context? Configure the optional `hooks/auto-memory.mjs` script (`... start` on `UserPromptSubmit`, `... stop` on `Stop`) to auto-inject bundles and auto-save transcripts.
+- Want zero-click context? Configure the optional `dist/hooks/auto-memory.js` script (`... start` on `UserPromptSubmit`, `... stop` on `Stop`) to auto-inject bundles and auto-save transcripts.
 
 ---
 
@@ -257,14 +257,15 @@ MEMORY_PROJECT_ROOT=/path/to/project npm run start
 <summary><strong>File Layout</strong></summary>
 
 ```text
-server.js              # entrypoint
-src/main.js            # MCP bootstrap and transport connection
-src/tools.js           # tool registration and handlers
-src/storage.js         # lock, load/write, atomic persistence
-src/runtime.js         # project root/path resolution
-src/domain.js          # scoring/tokenization/validation helpers
-src/config.js          # constants
-src/logger.js          # stderr logger
+server.ts              # entrypoint (source)
+dist/server.js         # entrypoint (runtime)
+src/main.ts            # MCP bootstrap and transport connection
+src/tools.ts           # tool registration and handlers
+src/storage.ts         # lock, load/write, atomic persistence
+src/runtime.ts         # project root/path resolution
+src/domain.ts          # scoring/tokenization/validation helpers
+src/config.ts          # constants
+src/logger.ts          # stderr logger
 .ai/memory.json        # persisted project memory (per project)
 ```
 
@@ -308,7 +309,7 @@ The auto-save hook runs **silently in the background** after each session:
    - Codex CLI: on notify events (when configured)
 
 2. **Processing**:
-   - `hooks/auto-save.mjs` reads the session transcript (JSONL or JSON format)
+   - `dist/hooks/auto-save.js` reads the session transcript (JSONL or JSON format)
    - Heuristic extractors analyze tool calls and results
    - Extracts structured facts like versions, dependencies, commits, error fixes
 
@@ -397,7 +398,7 @@ This repo includes `.claude/settings.json`:
     "Stop": [{
       "hooks": [{
         "type": "command",
-        "command": "node \"$CLAUDE_PROJECT_DIR/hooks/auto-save.mjs\"",
+        "command": "node \"$CLAUDE_PROJECT_DIR/dist/hooks/auto-save.js\"",
         "async": true,
         "timeout": 15
       }]
@@ -425,7 +426,7 @@ This repo includes `.gemini/settings.json`:
       "hooks": [{
         "name": "auto-save",
         "type": "command",
-        "command": "node \"$GEMINI_PROJECT_DIR/hooks/auto-save.mjs\""
+        "command": "node \"$GEMINI_PROJECT_DIR/dist/hooks/auto-save.js\""
       }]
     }]
   }
@@ -453,7 +454,7 @@ persistence = "save-all"  # or just true
 
 # Add the notify hook (adjust path to your installation)
 [notify]
-command = ["node", "/absolute/path/to/project-memory-mcp-js/hooks/codex-notify.mjs"]
+command = ["node", "/absolute/path/to/project-memory-mcp-js/dist/hooks/codex-notify.js"]
 ```
 
 Replace `/absolute/path/to/project-memory-mcp-js` with your actual installation path.
@@ -461,7 +462,7 @@ Replace `/absolute/path/to/project-memory-mcp-js` with your actual installation 
 **Optional**: Pass explicit history file path:
 ```toml
 [notify]
-command = ["node", "/path/to/hooks/codex-notify.mjs", "--history", "/path/to/history.jsonl"]
+command = ["node", "/path/to/dist/hooks/codex-notify.js", "--history", "/path/to/history.jsonl"]
 ```
 
 **To disable**: Remove the `[notify]` section from `config.toml`
@@ -469,8 +470,8 @@ command = ["node", "/path/to/hooks/codex-notify.mjs", "--history", "/path/to/his
 **Environment**: Hook receives `CODEX_PROJECT_DIR` env var pointing to project root
 
 **How it works**:
-1. Codex calls `codex-notify.mjs` with its notification payload
-2. The notify hook parses Codex's payload format and forwards it to `auto-save.mjs`
+1. Codex calls `codex-notify.js` with its notification payload
+2. The notify hook parses Codex's payload format and forwards it to `auto-save.js`
 3. Same extraction and saving process as Claude/Gemini
 
 ---
@@ -520,7 +521,7 @@ This creates a test transcript and verifies all three hooks work correctly.
 
 **Manual test** (single hook):
 ```bash
-echo '{"session_id":"test","transcript_path":"/tmp/test.jsonl","cwd":"'$(pwd)'"}' | node hooks/auto-save.mjs
+echo '{"session_id":"test","transcript_path":"/tmp/test.jsonl","cwd":"'$(pwd)'"}' | node dist/hooks/auto-save.js
 ```
 
 **Verify saved items**:
@@ -544,7 +545,7 @@ cat .ai/.auto-save-cursor.json
 
 **Debug mode**: Run hook manually with test payload to see errors:
 ```bash
-node hooks/auto-save.mjs < test-payload.json
+node dist/hooks/auto-save.js < test-payload.json
 ```
 
 </details>

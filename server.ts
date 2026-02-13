@@ -7,7 +7,7 @@ import process from "node:process";
 import { main } from "./src/main.js";
 import { log } from "./src/logger.js";
 
-async function run() {
+async function run(): Promise<void> {
   const [, , rawCommand] = process.argv;
   const command = rawCommand?.toLowerCase();
 
@@ -35,7 +35,7 @@ async function run() {
   process.exitCode = 1;
 }
 
-function printUsage() {
+function printUsage(): void {
   console.log(`
 Usage:
   project-memory-mcp               Start the MCP server (default)

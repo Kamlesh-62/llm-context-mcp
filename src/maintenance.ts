@@ -5,8 +5,18 @@ import { CONFIG } from "./config.js";
 import { newId, safeSnippet } from "./domain.js";
 import { log } from "./logger.js";
 import { nowIso } from "./runtime.js";
+import type { ArchiveStore, Store, StoreContext, MemoryItem } from "./types.js";
 
-function resolveArchivePath(projectRoot, archivePath) {
+type CompactOptions = {
+  maxItems?: number;
+  archivePath?: string;
+  summaryTitle?: string;
+  summaryTags?: string[];
+  summaryMaxEntries?: number;
+  reason?: "auto" | "manual";
+};
+
+function resolveArchivePath(projectRoot: string, archivePath?: string): string {
   if (!archivePath || !archivePath.trim()) {
     archivePath = CONFIG.autoCompact?.archiveRelPath || ".ai/memory-archive.json";
   }
@@ -15,21 +25,21 @@ function resolveArchivePath(projectRoot, archivePath) {
     : path.join(projectRoot, archivePath);
 }
 
-async function ensureDirForFile(filePath) {
+async function ensureDirForFile(filePath: string): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
 }
 
-async function atomicWriteJson(filePath, obj) {
+async function atomicWriteJson(filePath: string, obj: ArchiveStore): Promise<void> {
   await ensureDirForFile(filePath);
   const tmp = `${filePath}.tmp.${process.pid}.${Date.now()}`;
   await fs.writeFile(tmp, JSON.stringify(obj, null, 2), "utf8");
   await fs.rename(tmp, filePath);
 }
 
-async function readArchiveFile(filePath, projectRoot) {
+async function readArchiveFile(filePath: string, projectRoot: string): Promise<ArchiveStore> {
   try {
     const raw = await fs.readFile(filePath, "utf8");
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as ArchiveStore;
     if (parsed && typeof parsed === "object" && Array.isArray(parsed.items)) {
       return parsed;
     }
@@ -47,13 +57,13 @@ async function readArchiveFile(filePath, projectRoot) {
   };
 }
 
-function sortKey(item) {
+function sortKey(item: MemoryItem): number {
   const candidate = item.lastUsedAt || item.updatedAt || item.createdAt;
   const t = Date.parse(candidate || "");
   return Number.isFinite(t) ? t : 0;
 }
 
-function relativeArchiveLabel(projectRoot, archivePath) {
+function relativeArchiveLabel(projectRoot: string, archivePath: string): string {
   try {
     const rel = path.relative(projectRoot, archivePath);
     return rel.startsWith("..") ? archivePath : rel || archivePath;
@@ -62,9 +72,13 @@ function relativeArchiveLabel(projectRoot, archivePath) {
   }
 }
 
-export async function compactStoreInPlace(store, ctx, options = {}) {
+export async function compactStoreInPlace(
+  store: Store,
+  ctx: StoreContext,
+  options: CompactOptions = {},
+): Promise<{ archived: number; archivePath?: string; summaryItemId?: string }> {
   const { projectRoot } = ctx;
-  const cfg = CONFIG.autoCompact || {};
+  const cfg = CONFIG.autoCompact;
   const now = nowIso();
 
   const maxItems = Math.max(
@@ -78,10 +92,7 @@ export async function compactStoreInPlace(store, ctx, options = {}) {
 
   const summaryTitle =
     options.summaryTitle ?? cfg.summaryTitle ?? "Archived context";
-  const summaryTagsRaw =
-    options.summaryTags ??
-    (cfg.summaryTag ? [cfg.summaryTag] : []) ??
-    [];
+  const summaryTagsRaw = options.summaryTags ?? (cfg.summaryTag ? [cfg.summaryTag] : []);
   const summaryTags = Array.isArray(summaryTagsRaw)
     ? summaryTagsRaw.filter((t) => typeof t === "string" && t.trim())
     : [String(summaryTagsRaw)];
@@ -143,7 +154,7 @@ export async function compactStoreInPlace(store, ctx, options = {}) {
       bulletLines +
       moreLine;
 
-    const summaryItem = {
+    const summaryItem: MemoryItem = {
       id: newId("mem"),
       type: "note",
       title: summaryTitle,
@@ -173,8 +184,11 @@ export async function compactStoreInPlace(store, ctx, options = {}) {
   };
 }
 
-export async function autoCompactStore(store, ctx) {
-  const cfg = CONFIG.autoCompact || {};
+export async function autoCompactStore(
+  store: Store,
+  ctx: StoreContext,
+): Promise<{ archived: number; archivePath?: string; summaryItemId?: string }> {
+  const cfg = CONFIG.autoCompact;
   if (!cfg.enabled) return { archived: 0 };
   if (!cfg.maxItems || store.items.length <= cfg.maxItems) {
     return { archived: 0 };

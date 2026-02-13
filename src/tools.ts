@@ -11,6 +11,8 @@ import {
 import { autoCompactStore, compactStoreInPlace } from "./maintenance.js";
 import { withStore } from "./storage.js";
 import { nowIso } from "./runtime.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { MemoryItem, MemoryProposal } from "./types.js";
 
 const projectRootInput = z
   .string()
@@ -18,7 +20,7 @@ const projectRootInput = z
   .optional()
   .describe("Target project root path. Use this when server is shared across multiple projects.");
 
-function storeOptions(projectRoot) {
+function storeOptions(projectRoot?: string) {
   return projectRoot ? { projectRoot } : undefined;
 }
 
@@ -36,7 +38,7 @@ Common prompts:
 Every tool accepts optional projectRoot. More details: README.md or docs/LOCAL_SETUP.md.
 `.trim();
 
-export function registerTools(server) {
+export function registerTools(server: McpServer): void {
   server.registerTool(
     "memory_help",
     {
@@ -216,12 +218,12 @@ export function registerTools(server) {
     },
     async ({ items, reason, projectRoot }) => {
       const createdAt = nowIso();
-      const proposalIds = [];
+      const proposalIds: string[] = [];
 
       await withStore(
         async (st) => {
           for (const raw of items) {
-            const proposal = {
+            const proposal: MemoryProposal = {
               id: newId("prop"),
               type: validateType(raw.type),
               title: String(raw.title).trim(),
@@ -274,7 +276,7 @@ export function registerTools(server) {
 
       await withStore(
         async (st, ctx) => {
-          const item = {
+          const item: MemoryItem = {
             id: newId("mem"),
             type: validateType(type),
             title: String(title).trim(),
@@ -389,7 +391,7 @@ export function registerTools(server) {
           p.updatedAt = decidedAt;
 
           if (action === "approve") {
-            const item = {
+            const item: MemoryItem = {
               id: newId("mem"),
               type: p.type,
               title: p.title,
@@ -485,7 +487,7 @@ export function registerTools(server) {
       summaryMaxEntries,
       projectRoot,
     }) => {
-      let result = { archived: 0 };
+      let result: { archived: number; archivePath?: string } = { archived: 0 };
       await withStore(
         async (st, ctx) => {
           result = await compactStoreInPlace(st, ctx, {

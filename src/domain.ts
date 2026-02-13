@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 
 import { ALLOWED_TYPES, CONFIG } from "./config.js";
+import type { MemoryItem, MemoryType } from "./types.js";
 
-export function normalizeTags(tags) {
+export function normalizeTags(tags?: unknown): string[] {
   const arr = Array.isArray(tags) ? tags : [];
   const norm = arr
     .map((t) => String(t || "").trim().toLowerCase())
@@ -10,14 +11,18 @@ export function normalizeTags(tags) {
   return Array.from(new Set(norm)).slice(0, 20);
 }
 
-export function safeSnippet(text, maxChars = CONFIG.maxContentSnippetChars) {
+export function safeSnippet(text: unknown, maxChars = CONFIG.maxContentSnippetChars): string {
   const s = String(text ?? "");
   const trimmed = s.replace(/\s+/g, " ").trim();
   if (trimmed.length <= maxChars) return trimmed;
   return `${trimmed.slice(0, maxChars - 1)}…`;
 }
 
-export function scoreItem(item, queryTokens, tagTokens) {
+export function scoreItem(
+  item: Pick<MemoryItem, "title" | "content" | "tags" | "pinned">,
+  queryTokens: string[],
+  tagTokens: string[],
+): number {
   const hay = `${item.title || ""} ${item.content || ""}`.toLowerCase();
   let score = 0;
 
@@ -36,7 +41,7 @@ export function scoreItem(item, queryTokens, tagTokens) {
   return score;
 }
 
-export function tokenize(s) {
+export function tokenize(s: unknown): string[] {
   return String(s || "")
     .toLowerCase()
     .split(/[^a-z0-9_\-]+/i)
@@ -45,13 +50,13 @@ export function tokenize(s) {
     .slice(0, 40);
 }
 
-export function newId(prefix) {
+export function newId(prefix: string): string {
   // short, stable-ish id for CLI readability
   const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
   return `${prefix}_${id}`;
 }
 
-export function validateType(type) {
+export function validateType(type: unknown): MemoryType {
   const t = String(type || "note").toLowerCase().trim();
-  return ALLOWED_TYPES.has(t) ? t : "note";
+  return ALLOWED_TYPES.has(t as MemoryType) ? (t as MemoryType) : "note";
 }

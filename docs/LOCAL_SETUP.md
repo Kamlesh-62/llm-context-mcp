@@ -13,9 +13,10 @@ This guide walks through installing the server, wiring it into each CLI, and con
 ```bash
 cd /Users/itsupport4/Documents/project-memory-mcp-js
 npm install
+npm run build
 ```
 
-You normally do **not** run `npm start` manually; each CLI spawns `node server.js` when it needs the tools.
+You normally do **not** run `npm start` manually; each CLI spawns `node dist/server.js` when it needs the tools.
 
 ## 3. Optional environment overrides
 
@@ -31,7 +32,7 @@ Example manual start (for debugging):
 ```bash
 MEMORY_PROJECT_ROOT=/Users/.../repo \
 MEMORY_FILE_PATH=.ai/custom-memory.json \
-node server.js
+node dist/server.js
 ```
 
 ## 4. Guided setup command (recommended)
@@ -47,7 +48,7 @@ project-memory-mcp setup
 What it does:
 
 - Prompts for the project directory (defaults to your current working directory).
-- Lets you pick how the server should be launched (`npx project-memory-mcp`, global binary, `node /absolute/path/server.js`, or a fully custom command/args).
+- Lets you pick how the server should be launched (`npx project-memory-mcp`, global binary, `node /absolute/path/dist/server.js`, or a fully custom command/args).
 - Lets you choose which CLIs to configure (Claude Code, Gemini CLI, Codex CLI).
 - Updates `~/.claude.json` (with a `.bak` backup), then runs `gemini mcp` / `codex mcp` commands so they point to the right repo. Each CLI must already be installed and available on your `PATH`.
 - Supports automation via flags such as `--project`, `--cli claude,gemini`, `--runner global`, `--command`, `--args`, and `--yes` to skip prompts. Run `project-memory-mcp setup --help` for the full list.
@@ -61,7 +62,7 @@ Follow these minimal steps whenever you want to enable shared memory in another 
 1. **Update the server repo once**  
    ```bash
    cd /Users/itsupport4/Documents/project-memory-mcp-js
-   git pull && npm install
+   git pull && npm install && npm run build
    ```
 
 2. **From the target project folder (`/path/to/my-app`) configure MCP per CLI**  
@@ -70,7 +71,7 @@ Follow these minimal steps whenever you want to enable shared memory in another 
      "mcpServers": {
        "project-memory": {
          "command": "node",
-         "args": ["/Users/itsupport4/Documents/project-memory-mcp-js/server.js"],
+        "args": ["/Users/itsupport4/Documents/project-memory-mcp-js/dist/server.js"],
          "cwd": "/path/to/my-app"
        }
      }
@@ -79,13 +80,13 @@ Follow these minimal steps whenever you want to enable shared memory in another 
    - *Gemini CLI*:  
      ```bash
      cd /path/to/my-app
-     gemini mcp add project-memory node /Users/itsupport4/Documents/project-memory-mcp-js/server.js --trust
+    gemini mcp add project-memory node /Users/itsupport4/Documents/project-memory-mcp-js/dist/server.js --trust
      gemini mcp list
      ```
    - *Codex CLI*:  
      ```bash
      cd /path/to/my-app
-     codex mcp add project-memory node /Users/itsupport4/Documents/project-memory-mcp-js/server.js
+    codex mcp add project-memory node /Users/itsupport4/Documents/project-memory-mcp-js/dist/server.js
      codex mcp list
      ```
 
@@ -107,7 +108,7 @@ Edit `~/.claude.json` and add/merge this under the matching project block:
 "mcpServers": {
   "project-memory": {
     "command": "node",
-    "args": ["/Users/itsupport4/Documents/project-memory-mcp-js/server.js"],
+    "args": ["/Users/itsupport4/Documents/project-memory-mcp-js/dist/server.js"],
     "cwd": "/Users/.../opulence_api"
   }
 }
@@ -121,7 +122,7 @@ Follows the [Gemini MCP workflow](https://geminicli.com/docs/tools/mcp-server/):
 
 ```bash
 cd /Users/.../opulence_api
-gemini mcp add project-memory node /Users/itsupport4/Documents/project-memory-mcp-js/server.js --trust
+gemini mcp add project-memory node /Users/itsupport4/Documents/project-memory-mcp-js/dist/server.js --trust
 gemini mcp list    # should show project-memory CONNECTED
 /mcp               # in-session command to inspect tools/resources
 ```
@@ -136,7 +137,7 @@ gemini mcp list    # should show project-memory CONNECTED
 Codex MCP entries are global, so add the server once:
 
 ```bash
-codex mcp add project-memory node /Users/itsupport4/Documents/project-memory-mcp-js/server.js
+codex mcp add project-memory node /Users/itsupport4/Documents/project-memory-mcp-js/dist/server.js
 codex mcp list
 codex mcp get project-memory
 ```
@@ -167,25 +168,25 @@ Always start Codex from the target repo (`cd /Users/.../opulence_api && codex`) 
 
 Leave the provided hook configs inside your project to capture info automatically when sessions end:
 
-- `.claude/settings.json` – runs `hooks/auto-save.mjs` after Claude sessions.
+- `.claude/settings.json` – runs `dist/hooks/auto-save.js` after Claude sessions.
 - `.gemini/settings.json` – registers a `SessionEnd` hook for Gemini.
-- `hooks/codex-notify.mjs` – wire via `~/.codex/config.toml` to capture Codex history events.
+- `dist/hooks/codex-notify.js` – wire via `~/.codex/config.toml` to capture Codex history events.
 
-Run `npm run test:hooks` inside this repo to simulate all hook flows end-to-end.
+Run `npm run build && npm run test:hooks` inside this repo to simulate all hook flows end-to-end.
 
 ### Auto-memory (bundle + save) hook
 
-For a fully hands-off flow, use the new `hooks/auto-memory.mjs` script:
+For a fully hands-off flow, use the new `dist/hooks/auto-memory.js` script:
 
 | CLI Event | Command | What it does |
 |---|---|---|
-| `UserPromptSubmit` (first user message) | `node "$CLAUDE_PROJECT_DIR/hooks/auto-memory.mjs" start` | Compacts if needed, then injects a fresh `memory_get_bundle` result into the conversation. |
-| `Stop` (session end) | `node "$CLAUDE_PROJECT_DIR/hooks/auto-memory.mjs" stop` | Mirrors `auto-save.mjs`: parses transcript, auto-saves important facts/decisions. |
+| `UserPromptSubmit` (first user message) | `node "$CLAUDE_PROJECT_DIR/dist/hooks/auto-memory.js" start` | Compacts if needed, then injects a fresh `memory_get_bundle` result into the conversation. |
+| `Stop` (session end) | `node "$CLAUDE_PROJECT_DIR/dist/hooks/auto-memory.js" stop` | Mirrors `auto-save.js`: parses transcript, auto-saves important facts/decisions. |
 
 Use the same command for Gemini (`"$GEMINI_PROJECT_DIR"` in the path) or Codex (`"$CODEX_PROJECT_DIR"`). The script auto-detects which CLI invoked it and prints `{}` for Gemini when no output is needed.
 
 ## 10. Managing store size
 
-- The server auto-compacts once more than 400 active items exist (see `src/config.js > CONFIG.autoCompact`). Oldest entries move into `.ai/memory-archive.json`, and a summary item (tagged `archive`) stays in the main store.
+- The server auto-compacts once more than 400 active items exist (see `src/config.ts > CONFIG.autoCompact`). Oldest entries move into `.ai/memory-archive.json`, and a summary item (tagged `archive`) stays in the main store.
 - Trigger the same logic manually via the `memory_compact` tool, e.g. `Call memory_compact with {"maxItems":250}` to keep only the latest 250 active records.
 - Archived entries remain available in the archive file for audits; `memory_get_bundle` continues to use the lean active list so responses stay fast.

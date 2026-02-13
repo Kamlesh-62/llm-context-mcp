@@ -1,6 +1,6 @@
 {
   "name": "project-memory-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Project-scoped centralized memory as an MCP stdio server (JSON file backend).",
   "main": "./dist/server.js",
@@ -15,7 +15,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "test:hooks": "node dist/scripts/test-hooks.js"
+    "test:hooks": "node dist/scripts/test-hooks.js",
+    "prepublishOnly": "npm run build && npm run test:hooks"
   },
   "keywords": [
     "mcp",
@@ -28,9 +29,13 @@
     "model-context-protocol"
   ],
   "license": "MIT",
+  "homepage": "https://github.com/Kamlesh-62/llm-context-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/Kamlesh-62/llm-context-mcp/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/nicobailon/project-memory-mcp-js.git"
+    "url": "https://github.com/Kamlesh-62/llm-context-mcp.git"
   },
   "engines": {
     "node": ">=18.0.0"

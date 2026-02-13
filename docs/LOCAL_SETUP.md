@@ -8,15 +8,46 @@ This guide walks through installing the server, wiring it into each CLI, and con
 - This repo cloned locally (example path: `/Users/itsupport4/Documents/project-memory-mcp-js`)
 - Target project(s) checked out locally (each one gets its own `.ai/memory.json`)
 
-## 2. Install dependencies
+## 2. Choose your install path
+
+Pick the path that fits your workflow:
+
+### Option A – Global CLI (one-time install)
 
 ```bash
+npm install -g project-memory-mcp
+project-memory-mcp setup
+```
+
+CLI clients will call the globally installed binary (`project-memory-mcp`). Recommended for most developers.
+
+### Option B – On-demand via npx (no install)
+
+```bash
+npx project-memory-mcp setup
+```
+
+Great for quickly wiring a single machine—you always get the published build without keeping a copy in your repo.
+
+### Option C – Project dependency (package.json)
+
+```bash
+npm install --save-dev project-memory-mcp   # inside your app repo
+npx project-memory-mcp setup --project .
+```
+
+Now teammates can run `npm run memory:setup` or `npx project-memory-mcp serve` without installing anything globally. Point CLI configs at `node ./node_modules/project-memory-mcp/dist/server.js` or `npx project-memory-mcp`.
+
+### Option D – Local clone (development / hacking)
+
+```bash
+git clone https://github.com/nicobailon/project-memory-mcp-js.git
 cd /Users/itsupport4/Documents/project-memory-mcp-js
 npm install
 npm run build
 ```
 
-You normally do **not** run `npm start` manually; each CLI spawns `node dist/server.js` when it needs the tools.
+This keeps the source on disk so you can iterate on hooks or contribute upstream. Instead of `project-memory-mcp`, point your CLIs at `node /Users/itsupport4/Documents/project-memory-mcp-js/dist/server.js`. You normally do **not** run `npm start` manually; CLIs spawn the stdio server when needed.
 
 ## 3. Optional environment overrides
 

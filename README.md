@@ -8,7 +8,94 @@ You (any CLI) ──► MCP Server ──► .ai/memory.json (per project)
 
 This repository ships a Node.js MCP server that persists project facts/decisions into `<project>/.ai/memory.json`. Any supported CLI can read/write the same file, so switching between Claude, Codex, and Gemini feels stateful: load context with `memory_get_bundle`, perform work, and save what changed with `memory_save`.
 
-## Installation
+## Why Project Memory MCP?
+
+- **Shared context** – one `.ai/memory.json` per repo keeps Claude, Codex, and Gemini in sync.
+- **Batteries included tools** – search, bundle generation, pinning, proposals, auto-compaction.
+- **Silent capture** – optional hooks auto-save versions, deps, and commits at the end of a session.
+- **CLI + programmatic** – run the stdio server via `project-memory-mcp` or import the build artifacts in Node projects.
+
+## Installation Options
+
+Pick the workflow that fits your team:
+
+### 1. Global CLI (recommended for everyday use)
+
+```bash
+npm install -g project-memory-mcp
+project-memory-mcp setup
+```
+
+This installs the CLI once, adds a globally available `project-memory-mcp` command, and stores the server inside your global npm cache.
+
+### 2. On-demand via npx (no global install)
+
+```bash
+npx project-memory-mcp setup
+```
+
+npx downloads the package on first run and reuses the cached copy afterwards. Great for trying the tool or wiring up a single machine.
+
+### 3. Local clone (development / hacking)
+
+```bash
+git clone https://github.com/nicobailon/project-memory-mcp-js.git
+cd project-memory-mcp-js
+npm install
+npm run build
+```
+
+Then point your CLI at `node /absolute/path/dist/server.js`. This is also how you contribute and run the hook tests. See [Local development](#local-development) for details.
+
+## Quick Start (any install path)
+
+1. **Run the setup wizard** inside the repo you want to enable (or pass `--project /path`):
+   ```bash
+   project-memory-mcp setup        # global install
+   # or
+   npx project-memory-mcp setup    # on-demand
+   ```
+2. Choose how the CLI should spawn the server (`npx`, global binary, `node dist/server.js`, or a custom command).
+3. Pick which CLIs to configure (Claude Code, Gemini CLI, Codex CLI).
+4. Ask your CLI: “Call `memory_status` and show the output.” You should see the correct `projectRoot` and `.ai/memory.json`.
+
+Prefer the manual route or need automation flags? Jump to [Local development](#local-development) and `docs/LOCAL_SETUP.md`.
+
+## Run it as a project dependency
+
+If you want every teammate to install the server via your project’s `package.json`, add it as a dev dependency:
+
+```bash
+npm install --save-dev project-memory-mcp
+```
+
+Now you can expose scripts:
+
+```jsonc
+{
+  "scripts": {
+    "memory:serve": "project-memory-mcp serve",
+    "memory:setup": "project-memory-mcp setup --yes --runner node"
+  }
+}
+```
+
+From there your CLI entries can point at `npx project-memory-mcp` or `node ./node_modules/project-memory-mcp/dist/server.js`. The published package bundles the `dist/` tree, so no build step is needed on consumer machines.
+
+## Local development
+
+Working out of this repo?
+
+1. `npm install`
+2. `npm run build`
+3. `npm run test:hooks` (optional smoke test for hook flows)
+4. Wire your CLIs using `node dist/server.js` or `project-memory-mcp` (after linking via `npm link`)
+
+See [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md) for the long-form guide, env overrides, troubleshooting, and hook wiring defaults.
+
+## CLI Setup & Tool Map
+
+Already installed globally, via npx, or from source? Run the wizard from the repo you want to enable:
 
 ```bash
 # Install globally (recommended)

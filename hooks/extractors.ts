@@ -4,9 +4,11 @@
  * candidate memory items: { type, title, content, tags }.
  */
 
+import type { MemoryType } from "../src/types.js";
+
 type TranscriptLine = Record<string, any>;
 type ExtractedItem = {
-  type: string;
+  type: MemoryType;
   title: string;
   content: string;
   tags?: string[];
@@ -282,7 +284,7 @@ export function extractFileChanges(lines: TranscriptLine[]): ExtractedItem[] {
 
 // ── Extractor 4: Decisions / constraints / architecture from assistant text ──
 
-const DECISION_PATTERNS = [
+const DECISION_PATTERNS: Array<{ re: RegExp; type: MemoryType }> = [
   { re: /\b(decided to|switched from|switched to|chose|migrated)\b/i, type: "decision" },
   { re: /\b(always|never|must not|must|do not)\b/i, type: "constraint" },
   { re: /\b(the architecture|pattern is|structure|design)\b/i, type: "architecture" },

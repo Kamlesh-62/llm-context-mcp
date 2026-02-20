@@ -1,5 +1,13 @@
 import type { MemoryType } from "./types.js";
 
+export const LIMITS = {
+  maxTags:         20,   // normalizeTags in domain.ts
+  maxTitleChars:  200,   // item push in hooks/shared.ts
+  maxContentChars: 500,  // item push in hooks/shared.ts
+  maxCursorHashes: 200,  // cursor.ts trim
+  maxSnippetChars: 280,  // safeSnippet in domain.ts
+} as const;
+
 export type AutoCompactConfig = {
   enabled: boolean;
   maxItems: number;
@@ -30,7 +38,7 @@ export const CONFIG: Config = {
   lockRetryDelayMs: 50,
   lockRetryBackoff: 1.25,
   maxLockRetryDelayMs: 250,
-  maxContentSnippetChars: 280,
+  maxContentSnippetChars: LIMITS.maxSnippetChars,
   autoCompact: {
     enabled: true,
     maxItems: 400,

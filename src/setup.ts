@@ -32,15 +32,18 @@ type CliSelection = {
   codex: boolean;
 };
 
-type ParsedArgs = {
+type CommonArgs = {
   projectRoot: string | null;
-  serverId: string | null;
+  cliFilters: string[] | null;
   acceptDefaults: boolean;
+  help: boolean;
+};
+
+type ParsedArgs = CommonArgs & {
+  serverId: string | null;
   runner: string | null;
   customCommand: string | null;
   customArgs: string | null;
-  cliFilters: string[] | null;
-  help: boolean;
 };
 
 type StepResult = {
@@ -81,13 +84,16 @@ const BUILTIN_RUNNERS = {
   },
 };
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function runSetup(argv: string[] = []): Promise<number> {
   let parsedArgs;
   try {
     parsedArgs = parseArgs(argv);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(message);
+    console.error(errorMessage(error));
     return 1;
   }
 
@@ -108,16 +114,14 @@ export async function runSetup(argv: string[] = []): Promise<number> {
     try {
       serverId = await resolveServerId(rl, parsedArgs, projectRoot, projectDefaults);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(message);
+      console.error(errorMessage(error));
       return 1;
     }
     let runner: Runner;
     try {
       runner = await resolveRunner(rl, parsedArgs, projectDefaults.runner);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(message);
+      console.error(errorMessage(error));
       return 1;
     }
     const selection = await resolveCliSelection(rl, parsedArgs);
@@ -212,24 +216,15 @@ function parseArgs(argv: string[]): ParsedArgs {
 
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
+    const newI = tryParseCommonToken(argv, i, result);
+    if (newI !== null) {
+      i = newI;
+      continue;
+    }
     switch (token) {
-      case "--project":
-      case "--cwd":
-        result.projectRoot = requireValue(argv, ++i, token);
-        break;
       case "--server-id":
         result.serverId = requireValue(argv, ++i, token);
         break;
-      case "--cli":
-        result.cliFilters = parseCliList(requireValue(argv, ++i, token));
-        break;
-      case "--claude":
-      case "--gemini":
-      case "--codex": {
-        const value = token.slice(2);
-        result.cliFilters = mergeCliFilter(result.cliFilters, [value]);
-        break;
-      }
       case "--runner-profile":
       case "--runner":
         result.runner = requireValue(argv, ++i, token);
@@ -239,14 +234,6 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--args":
         result.customArgs = requireValue(argv, ++i, token);
-        break;
-      case "--yes":
-      case "-y":
-        result.acceptDefaults = true;
-        break;
-      case "--help":
-      case "-h":
-        result.help = true;
         break;
       default:
         throw new Error(`Unknown setup option "${token}". Run with --help for usage.`);
@@ -261,6 +248,37 @@ function requireValue(argv: string[], index: number, flag: string): string {
     throw new Error(`Option ${flag} requires a value.`);
   }
   return argv[index];
+}
+
+/** Handles the 5 tokens shared by both parseArgs and parseSwitchArgs.
+ *  Returns the updated index if the token was consumed, null if unrecognised. */
+function tryParseCommonToken(argv: string[], i: number, result: CommonArgs): number | null {
+  const token = argv[i];
+  switch (token) {
+    case "--project":
+    case "--cwd":
+      result.projectRoot = requireValue(argv, ++i, token);
+      return i;
+    case "--cli":
+      result.cliFilters = parseCliList(requireValue(argv, ++i, token));
+      return i;
+    case "--claude":
+    case "--gemini":
+    case "--codex": {
+      result.cliFilters = mergeCliFilter(result.cliFilters, [token.slice(2)]);
+      return i;
+    }
+    case "--yes":
+    case "-y":
+      result.acceptDefaults = true;
+      return i;
+    case "--help":
+    case "-h":
+      result.help = true;
+      return i;
+    default:
+      return null;
+  }
 }
 
 function parseCliList(value: string): string[] {
@@ -331,8 +349,7 @@ async function resolveProjectRoot(
       await assertDirectory(candidate);
       return candidate;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`  ${message}`);
+      console.error(`  ${errorMessage(error)}`);
     }
   }
 }
@@ -426,8 +443,7 @@ async function resolveServerId(
       }
       return validated;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.log(`  ${message}`);
+      console.log(`  ${errorMessage(error)}`);
     }
   }
 }
@@ -587,8 +603,7 @@ async function promptCustomRunner(
     try {
       resolvedArgs = parseArgsInput(answer);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`  ${message}`);
+      console.error(`  ${errorMessage(error)}`);
       resolvedArgs = null;
     }
   }
@@ -919,12 +934,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-type ParsedSwitchArgs = {
-  projectRoot: string | null;
-  cliFilters: string[] | null;
-  acceptDefaults: boolean;
-  help: boolean;
-};
+type ParsedSwitchArgs = CommonArgs;
 
 function parseSwitchArgs(argv: string[]): ParsedSwitchArgs {
   const result: ParsedSwitchArgs = {
@@ -935,33 +945,12 @@ function parseSwitchArgs(argv: string[]): ParsedSwitchArgs {
   };
 
   for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i];
-    switch (token) {
-      case "--project":
-      case "--cwd":
-        result.projectRoot = requireValue(argv, ++i, token);
-        break;
-      case "--cli":
-        result.cliFilters = parseCliList(requireValue(argv, ++i, token));
-        break;
-      case "--claude":
-      case "--gemini":
-      case "--codex": {
-        const value = token.slice(2);
-        result.cliFilters = mergeCliFilter(result.cliFilters, [value]);
-        break;
-      }
-      case "--yes":
-      case "-y":
-        result.acceptDefaults = true;
-        break;
-      case "--help":
-      case "-h":
-        result.help = true;
-        break;
-      default:
-        throw new Error(`Unknown switch option "${token}". Run with --help for usage.`);
+    const newI = tryParseCommonToken(argv, i, result);
+    if (newI !== null) {
+      i = newI;
+      continue;
     }
+    throw new Error(`Unknown switch option "${argv[i]}". Run with --help for usage.`);
   }
 
   return result;
@@ -993,8 +982,7 @@ export async function runSwitch(argv: string[] = []): Promise<number> {
   try {
     parsedArgs = parseSwitchArgs(argv);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(message);
+    console.error(errorMessage(error));
     return 1;
   }
 
@@ -1007,8 +995,7 @@ export async function runSwitch(argv: string[] = []): Promise<number> {
   try {
     await assertDirectory(projectRoot);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(message);
+    console.error(errorMessage(error));
     return 1;
   }
 

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import { ALLOWED_TYPES, CONFIG } from "./config.js";
+import { ALLOWED_TYPES, CONFIG, LIMITS } from "./config.js";
 import type { MemoryItem, MemoryType } from "./types.js";
 
 export function normalizeTags(tags?: unknown): string[] {
@@ -8,7 +8,7 @@ export function normalizeTags(tags?: unknown): string[] {
   const norm = arr
     .map((t) => String(t || "").trim().toLowerCase())
     .filter(Boolean);
-  return Array.from(new Set(norm)).slice(0, 20);
+  return Array.from(new Set(norm)).slice(0, LIMITS.maxTags);
 }
 
 export function safeSnippet(text: unknown, maxChars = CONFIG.maxContentSnippetChars): string {

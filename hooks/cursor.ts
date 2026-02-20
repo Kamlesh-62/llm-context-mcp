@@ -1,6 +1,8 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 
+import { LIMITS } from "../src/config.js";
+
 const DEFAULTS = { sessionId: null, lastLineIndex: -1, itemHashes: [], updatedAt: null };
 
 export async function loadCursor(
@@ -34,7 +36,7 @@ export async function saveCursor(
   lastLineIndex: number,
   itemHashes: string[],
 ): Promise<void> {
-  const trimmed = itemHashes.slice(-200);
+  const trimmed = itemHashes.slice(-LIMITS.maxCursorHashes);
   const data = {
     sessionId,
     lastLineIndex,

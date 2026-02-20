@@ -230,6 +230,7 @@ function parseArgs(argv: string[]): ParsedArgs {
         result.cliFilters = mergeCliFilter(result.cliFilters, [value]);
         break;
       }
+      case "--runner-profile":
       case "--runner":
         result.runner = requireValue(argv, ++i, token);
         break;
@@ -298,7 +299,7 @@ function printHelp(): void {
       "  --project <path>     Project directory to bind the MCP server to.",
       "  --server-id <name>   Friendly server ID (a-z0-9-, 3-32 chars).",
       "  --cli <list>         Comma-separated subset of CLIs (claude,gemini,codex).",
-      "  --runner <type>      npx | global | node | custom.",
+      "  --runner <type>      npx | global | node | custom (alias: --runner-profile).",
       "  --command <value>    Custom command (required when --runner custom).",
       "  --args <string>      Custom command args (JSON array or space separated).",
       "  -y, --yes            Accept defaults without interactive prompts.",
@@ -408,7 +409,22 @@ async function resolveServerId(
       continue;
     }
     try {
-      return validateServerId(candidate);
+      const validated = validateServerId(candidate);
+      const existing = await checkExistingClaudeEntry(validated);
+      if (existing.exists) {
+        console.log(
+          `  Server ID "${validated}" is already registered in Claude Code (command: ${existing.command ?? "unknown"}).`,
+        );
+        const choice = (
+          await rl.question(`  (1) Update existing entry  (2) Enter a different ID [1]: `)
+        )
+          .trim()
+          .toLowerCase();
+        if (choice === "2") {
+          continue;
+        }
+      }
+      return validated;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.log(`  ${message}`);
@@ -736,6 +752,22 @@ async function configureClaude({
   console.log(`  Updated ${CLAUDE_CONFIG_PATH}`);
 }
 
+async function checkExistingClaudeEntry(
+  serverId: string,
+): Promise<{ exists: boolean; command?: string; args?: string[] }> {
+  const { data } = await loadJson(CLAUDE_CONFIG_PATH);
+  if (!isPlainObject(data) || !isPlainObject(data.mcpServers)) {
+    return { exists: false };
+  }
+  const entry = data.mcpServers[serverId];
+  if (!isPlainObject(entry)) {
+    return { exists: false };
+  }
+  const command = typeof entry.command === "string" ? entry.command : undefined;
+  const args = Array.isArray(entry.args) ? entry.args.map(String) : undefined;
+  return { exists: true, command, args };
+}
+
 async function loadJson(filePath: string): Promise<{ data: unknown; raw: string | null }> {
   try {
     const raw = await readFile(filePath, "utf8");
@@ -885,4 +917,156 @@ function suggestServerId(projectRoot: string): string | null {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+type ParsedSwitchArgs = {
+  projectRoot: string | null;
+  cliFilters: string[] | null;
+  acceptDefaults: boolean;
+  help: boolean;
+};
+
+function parseSwitchArgs(argv: string[]): ParsedSwitchArgs {
+  const result: ParsedSwitchArgs = {
+    projectRoot: null,
+    cliFilters: null,
+    acceptDefaults: false,
+    help: false,
+  };
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const token = argv[i];
+    switch (token) {
+      case "--project":
+      case "--cwd":
+        result.projectRoot = requireValue(argv, ++i, token);
+        break;
+      case "--cli":
+        result.cliFilters = parseCliList(requireValue(argv, ++i, token));
+        break;
+      case "--claude":
+      case "--gemini":
+      case "--codex": {
+        const value = token.slice(2);
+        result.cliFilters = mergeCliFilter(result.cliFilters, [value]);
+        break;
+      }
+      case "--yes":
+      case "-y":
+        result.acceptDefaults = true;
+        break;
+      case "--help":
+      case "-h":
+        result.help = true;
+        break;
+      default:
+        throw new Error(`Unknown switch option "${token}". Run with --help for usage.`);
+    }
+  }
+
+  return result;
+}
+
+function printSwitchHelp(): void {
+  console.log(
+    [
+      "Usage: project-memory-mcp switch [options]",
+      "",
+      "Re-applies saved server configuration to selected CLIs without interactive prompts.",
+      "Reads configuration from .ai/memory-mcp.json (created by 'setup').",
+      "",
+      "Options:",
+      "  --project <path>     Project directory (default: current directory).",
+      "  --cli <list>         Comma-separated subset of CLIs (claude,gemini,codex).",
+      "  -y, --yes            Accept defaults without interactive prompts.",
+      "  -h, --help           Show this help text.",
+      "",
+      "Examples:",
+      "  project-memory-mcp switch",
+      "  project-memory-mcp switch --project ~/code/api --cli claude",
+    ].join("\n"),
+  );
+}
+
+export async function runSwitch(argv: string[] = []): Promise<number> {
+  let parsedArgs: ParsedSwitchArgs;
+  try {
+    parsedArgs = parseSwitchArgs(argv);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    return 1;
+  }
+
+  if (parsedArgs.help) {
+    printSwitchHelp();
+    return 0;
+  }
+
+  const projectRoot = resolvePath(parsedArgs.projectRoot ?? process.cwd());
+  try {
+    await assertDirectory(projectRoot);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    return 1;
+  }
+
+  const defaults = await loadProjectDefaults(projectRoot);
+  if (!defaults.serverId || !defaults.runner) {
+    console.error(
+      `No saved configuration found at ".ai/memory-mcp.json". Run \`project-memory-mcp setup\` first.`,
+    );
+    return 1;
+  }
+
+  const runner = restoreSavedRunner(defaults.runner) ?? cloneRunner("npx");
+  const selection: CliSelection = parsedArgs.cliFilters?.length
+    ? {
+        claude: parsedArgs.cliFilters.includes("claude"),
+        gemini: parsedArgs.cliFilters.includes("gemini"),
+        codex: parsedArgs.cliFilters.includes("codex"),
+      }
+    : { claude: true, gemini: true, codex: true };
+
+  if (!selection.claude && !selection.gemini && !selection.codex) {
+    console.log("No CLIs selected. Nothing to configure.");
+    return 0;
+  }
+
+  const serverId = defaults.serverId;
+  console.log("\nApplying saved configuration:");
+  console.log(`  Project root: ${projectRoot}`);
+  console.log(`  Server ID: ${serverId}`);
+  console.log(`  Server command: ${formatCommand(runner.command, runner.args)}`);
+  console.log(`  Target CLIs: ${listSelectedClis(selection)}`);
+
+  const steps: StepResult[] = [];
+  if (selection.claude) {
+    steps.push(
+      await executeStep("Claude Code", () => configureClaude({ projectRoot, runner, serverId })),
+    );
+  }
+  if (selection.gemini) {
+    steps.push(
+      await executeStep("Gemini CLI", () => configureGemini({ projectRoot, runner, serverId })),
+    );
+  }
+  if (selection.codex) {
+    steps.push(
+      await executeStep("Codex CLI", () => configureCodex({ projectRoot, runner, serverId })),
+    );
+  }
+
+  const failures = steps.filter((step) => !step.ok);
+  if (failures.length === 0) {
+    console.log("\nAll selected CLIs are configured.");
+    return 0;
+  }
+
+  console.log("\nFinished with errors:");
+  failures.forEach((failure) => {
+    console.log(`  - ${failure.label}: ${failure.error?.message ?? "Unknown error"}`);
+  });
+  return 1;
 }

@@ -37,6 +37,15 @@ async function run(): Promise<void> {
     return;
   }
 
+  if (command === "switch") {
+    const { runSwitch } = await import("./src/setup.js");
+    const exitCode = await runSwitch(process.argv.slice(3));
+    if (typeof exitCode === "number" && exitCode !== 0) {
+      process.exitCode = exitCode;
+    }
+    return;
+  }
+
   if (command === "help" || command === "--help" || command === "-h") {
     printUsage();
     return;
@@ -53,6 +62,7 @@ Usage:
   project-memory-mcp               Start the MCP server (default)
   project-memory-mcp serve         Explicitly start the MCP server
   project-memory-mcp setup [...]   Run the interactive CLI configuration wizard
+  project-memory-mcp switch [...]  Re-apply saved config to CLIs (no prompts)
   project-memory-mcp help          Show this message
 `.trim());
 }

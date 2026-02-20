@@ -141,7 +141,7 @@ That's the core loop: **get bundle → do work → save what matters**.
    - Lets you choose how to launch the MCP server (`npx`, global binary, `node /path/to/dist/server.js`, or a custom command).
    - Lets you pick which CLIs to configure (Claude Code, Gemini CLI, Codex CLI).
    - Automatically updates `~/.claude.json` (with a `.bak` backup) and runs the necessary `gemini mcp` / `codex mcp` commands so they point at the right project.
-   - Flags: `--project /path`, `--server-id my-server-name`, `--cli claude,gemini`, `--runner global`, `--yes`, `--command`, and `--args` let you script it or skip prompts. Run `project-memory-mcp setup --help` for the full list.
+   - Flags: `--project /path`, `--server-id my-server-name`, `--cli claude,gemini`, `--runner global` (alias: `--runner-profile`), `--yes`, `--command`, and `--args` let you script it or skip prompts. Run `project-memory-mcp setup --help` for the full list.
    - Requires the corresponding CLIs to already be installed and on your `PATH`.
 
    > Claude setup in sandboxes: set `PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH=/custom/path/claude.json` (or `CLAUDE_CONFIG_PATH`) before running the wizard if `~/.claude.json` isn’t writeable. The wizard reads/writes that custom file and still produces a `.bak` alongside it.
@@ -182,6 +182,13 @@ That's the core loop: **get bundle → do work → save what matters**.
    - Need a reminder of commands? Run `memory_help` anytime for the cheat sheet.
 
    The wizard remembers your last choices inside `<project>/.ai/memory-mcp.json`, so future runs can pre-fill the same server ID and runner. Remove that file if you want to start from scratch.
+
+   Once you've run `setup` once, you can re-apply the saved config to any CLI without prompts:
+   ```bash
+   project-memory-mcp switch                     # all CLIs
+   project-memory-mcp switch --cli claude        # Claude only
+   project-memory-mcp switch --project ~/code/api
+   ```
 
    > Prefer the long-form guide (env overrides, troubleshooting, auto hooks)? See `docs/LOCAL_SETUP.md`.
 

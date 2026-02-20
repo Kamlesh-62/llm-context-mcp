@@ -1,6 +1,6 @@
 {
   "name": "project-memory-mcp",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "type": "module",
   "description": "Project-scoped centralized memory as an MCP stdio server (JSON file backend).",
   "main": "./dist/server.js",

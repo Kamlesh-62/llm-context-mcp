@@ -4,9 +4,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CONFIG } from "./config.js";
 import { log } from "./logger.js";
 import { findProjectRoot, resolveMemoryFilePath } from "./runtime.js";
-import { registerTools } from "./tools.js";
+import { registerTools } from "./tools/index.js";
 import { registerPrompts } from "./prompts.js";
-import { SuggestionEngine } from "./suggestions.js";
+import { SuggestionEngine } from "./suggestions/index.js";
 
 export async function main() {
   const server = new McpServer({

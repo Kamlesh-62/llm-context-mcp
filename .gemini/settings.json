@@ -19,6 +19,13 @@
       "args": [
         "/Users/itsupport4/Documents/project-memory-mcp-js/server.js"
       ]
+    },
+    "test-drx": {
+      "command": "npx",
+      "args": [
+        "project-memory-mcp"
+      ],
+      "trust": true
     }
   }
 }

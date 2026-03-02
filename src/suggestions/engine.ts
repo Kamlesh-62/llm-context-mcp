@@ -1,156 +1,20 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-import { CONFIG, type SuggestionConfig } from "./config.js";
-import { newId, normalizeTags, validateType } from "./domain.js";
-import { nowIso } from "./runtime.js";
-import type { MemoryType } from "./types.js";
-import {
-  RE_VERSION,
-  RE_NPM_INSTALL,
-  RE_PIP_INSTALL,
-  RE_CARGO_ADD,
-} from "../hooks/extractors.js";
+import { CONFIG, type SuggestionConfig } from "../config.js";
+import { newId, normalizeTags } from "../domain.js";
+import { nowIso } from "../runtime.js";
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export type ObservationType =
-  | "bash_command"
-  | "bash_output"
-  | "file_edit"
-  | "tool_call"
-  | "text"
-  | "error"
-  | "resolution";
-
-export interface Observation {
-  type: ObservationType;
-  content: string;
-  toolName?: string;
-  timestamp: string;
-  metadata?: Record<string, unknown>;
-}
-
-export type RuleCategory =
-  | "version-check"
-  | "dependency-change"
-  | "deploy-release"
-  | "error-fix"
-  | "config-change";
-
-export interface Suggestion {
-  id: string;
-  type: MemoryType;
-  title: string;
-  content: string;
-  tags: string[];
-  confidence: number;
-  priority: number;
-  autoSave: boolean;
-  source: string;
-  triggeredBy: RuleCategory;
-  score: number;
-  createdAt: string;
-}
-
-export interface CategoryFeedback {
-  multiplier: number;
-  accepts: number;
-  rejects: number;
-}
-
-export interface FeedbackStore {
-  categories: Record<RuleCategory, CategoryFeedback>;
-  updatedAt: string;
-}
-
-// ── Rules ────────────────────────────────────────────────────────────────────
-
-type SuggestionRule = {
-  category: RuleCategory;
-  baseWeight: number;
-  memoryType: MemoryType;
-  match: (obs: Observation, engine: SuggestionEngine) => string | null;
-};
-
-const RE_DEPLOY = /docker push|npm publish|git tag|deploy|kubectl apply/i;
-const RE_CONFIG_FILE = /\.(env|config|ya?ml|toml|ini|json|rc)$/i;
-
-const RULES: SuggestionRule[] = [
-  {
-    category: "version-check",
-    baseWeight: 2,
-    memoryType: "fact",
-    match: (obs) => {
-      if (obs.type !== "bash_command" && obs.type !== "bash_output") return null;
-      const m = obs.content.match(RE_VERSION);
-      return m ? `Version check: ${m[0]}` : null;
-    },
-  },
-  {
-    category: "dependency-change",
-    baseWeight: 3,
-    memoryType: "fact",
-    match: (obs) => {
-      if (obs.type !== "bash_command") return null;
-      const npm = obs.content.match(RE_NPM_INSTALL);
-      if (npm) return `Added dependency: ${npm[3] || npm[0]}`;
-      const pip = obs.content.match(RE_PIP_INSTALL);
-      if (pip) return `Added dependency: ${pip[2] || pip[0]}`;
-      const cargo = obs.content.match(RE_CARGO_ADD);
-      if (cargo) return `Added dependency: ${cargo[1] || cargo[0]}`;
-      return null;
-    },
-  },
-  {
-    category: "deploy-release",
-    baseWeight: 3,
-    memoryType: "note",
-    match: (obs) => {
-      if (obs.type !== "bash_command") return null;
-      const m = obs.content.match(RE_DEPLOY);
-      return m ? `Deploy/release: ${obs.content.slice(0, 120)}` : null;
-    },
-  },
-  {
-    category: "error-fix",
-    baseWeight: 4,
-    memoryType: "fact",
-    match: (obs, engine) => engine.evaluateErrorFix(obs),
-  },
-  {
-    category: "config-change",
-    baseWeight: 2,
-    memoryType: "fact",
-    match: (obs) => {
-      if (obs.type !== "file_edit") return null;
-      const m = obs.content.match(RE_CONFIG_FILE);
-      return m ? `Config change: ${obs.content.slice(0, 120)}` : null;
-    },
-  },
-];
-
-// ── Feedback defaults ────────────────────────────────────────────────────────
-
-const ALL_CATEGORIES: RuleCategory[] = [
-  "version-check",
-  "dependency-change",
-  "deploy-release",
-  "error-fix",
-  "config-change",
-];
-
-function defaultFeedback(): FeedbackStore {
-  const categories = {} as Record<RuleCategory, CategoryFeedback>;
-  for (const cat of ALL_CATEGORIES) {
-    categories[cat] = { multiplier: 1.0, accepts: 0, rejects: 0 };
-  }
-  return { categories, updatedAt: nowIso() };
-}
-
-// ── Engine ───────────────────────────────────────────────────────────────────
+import type {
+  FeedbackStore,
+  Observation,
+  RuleCategory,
+  Suggestion,
+  SuggestionRule,
+} from "./types.js";
+import { RULES } from "./rules.js";
+import { defaultFeedback, loadFeedbackFromDisk, saveFeedbackToDisk } from "./feedback.js";
 
 export class SuggestionEngine {
   private config: SuggestionConfig;
@@ -178,34 +42,14 @@ export class SuggestionEngine {
 
   private async loadFeedback(): Promise<FeedbackStore> {
     if (this.feedbackCache) return this.feedbackCache;
-    if (!this.feedbackPath) return defaultFeedback();
-    try {
-      const raw = await fs.readFile(this.feedbackPath, "utf8");
-      const parsed = JSON.parse(raw) as FeedbackStore;
-      if (parsed && parsed.categories) {
-        this.feedbackCache = parsed;
-        return parsed;
-      }
-    } catch {
-      // file missing or corrupt
-    }
-    const fb = defaultFeedback();
+    const fb = await loadFeedbackFromDisk(this.feedbackPath);
     this.feedbackCache = fb;
     return fb;
   }
 
   private async saveFeedback(feedback: FeedbackStore): Promise<void> {
-    if (!this.feedbackPath) return;
-    feedback.updatedAt = nowIso();
     this.feedbackCache = feedback;
-    try {
-      await fs.mkdir(path.dirname(this.feedbackPath), { recursive: true });
-      const tmp = `${this.feedbackPath}.tmp.${process.pid}.${Date.now()}`;
-      await fs.writeFile(tmp, JSON.stringify(feedback, null, 2), "utf8");
-      await fs.rename(tmp, this.feedbackPath);
-    } catch {
-      // best-effort
-    }
+    await saveFeedbackToDisk(this.feedbackPath, feedback);
   }
 
   private async updateFeedback(
@@ -287,7 +131,6 @@ export class SuggestionEngine {
   evaluateErrorFix(obs: Observation): string | null {
     if (obs.type !== "resolution") return null;
 
-    // Look backwards in window for a preceding error
     for (let i = this.window.length - 1; i >= 0; i--) {
       const prev = this.window[i];
       if (prev.type === "error" || (prev.type === "bash_output" && /error|ERR!|FAIL|fatal:/i.test(prev.content))) {
@@ -302,7 +145,6 @@ export class SuggestionEngine {
   private notify(suggestion: Suggestion): void {
     if (!this.server) return;
     try {
-      // Access the underlying Server instance for sendLoggingMessage
       (this.server as any).server?.sendLoggingMessage?.({
         level: "info",
         logger: "suggestion-engine",
@@ -320,12 +162,10 @@ export class SuggestionEngine {
       this.setProjectRoot(projectRoot);
     }
 
-    // Ensure timestamp
     if (!obs.timestamp) {
       obs.timestamp = nowIso();
     }
 
-    // Push to FIFO window
     this.window.push(obs);
     if (this.window.length > this.config.maxWindowSize) {
       this.window.splice(0, this.window.length - this.config.maxWindowSize);

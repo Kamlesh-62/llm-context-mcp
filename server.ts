@@ -29,7 +29,7 @@ async function run(): Promise<void> {
   }
 
   if (command === "setup" || command === "configure") {
-    const { runSetup } = await import("./src/setup.js");
+    const { runSetup } = await import("./src/cli/setup.js");
     const exitCode = await runSetup(process.argv.slice(3));
     if (typeof exitCode === "number" && exitCode !== 0) {
       process.exitCode = exitCode;
@@ -38,7 +38,7 @@ async function run(): Promise<void> {
   }
 
   if (command === "switch") {
-    const { runSwitch } = await import("./src/setup.js");
+    const { runSwitch } = await import("./src/cli/switch.js");
     const exitCode = await runSwitch(process.argv.slice(3));
     if (typeof exitCode === "number" && exitCode !== 0) {
       process.exitCode = exitCode;

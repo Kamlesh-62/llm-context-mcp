@@ -8,4 +8,7 @@ pnpm-debug.log*
 .DS_Store
 .ai/
 .aider*
+.env
+.env.*
+!.env.example
 .tmp/

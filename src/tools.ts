@@ -13,6 +13,7 @@ import { withStore } from "./storage.js";
 import { nowIso } from "./runtime.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { MemoryItem, MemoryProposal } from "./types.js";
+import type { SuggestionEngine, ObservationType } from "./suggestions.js";
 
 const projectRootInput = z
   .string()
@@ -34,15 +35,23 @@ Common prompts:
 - Prefer approvals? Call memory_propose with {"items":[...]} then memory_approve_proposal.
 - Need to find info later? Call memory_search with {"query":"...", "includeContent":true}.
 - Keep the store lean: Call memory_compact with {"maxItems":250} (archives oldest items).
+- Call memory_update with {"itemId":"...", "title":"...", ...} → update existing item fields.
+- Call memory_delete with {"itemId":"..."} → permanently remove an item.
+- Push context for suggestions: Call memory_observe with {"type":"bash_command","content":"npm install axios"}.
+- Check pending suggestions: Call memory_suggest.
+- Accept/reject: Call memory_suggestion_feedback with {"suggestionId":"...","action":"accept"}.
 
 Every tool accepts optional projectRoot. More details: README.md or docs/LOCAL_SETUP.md.
 `.trim();
 
-export function registerTools(server: McpServer): void {
+export function registerTools(server: McpServer, engine?: SuggestionEngine): void {
+  
+  // memory_help: Show quick-start instructions and sample prompts for all memory tools.
   server.registerTool(
     "memory_help",
     {
-      description: "Show quick-start instructions and sample prompts for all memory tools.",
+      description:
+        "Show quick-start instructions and sample prompts for all memory tools.",
       inputSchema: {},
     },
     async () => ({
@@ -50,6 +59,7 @@ export function registerTools(server: McpServer): void {
     }),
   );
 
+  // memory_status: Show which project root and memory file this server call resolves to.
   server.registerTool(
     "memory_status",
     {
@@ -60,10 +70,11 @@ export function registerTools(server: McpServer): void {
       },
     },
     async ({ projectRoot }) => {
-      const { store, projectRoot: resolvedProjectRoot, memoryFilePath } = await withStore(
-        async () => false,
-        storeOptions(projectRoot),
-      );
+      const {
+        store,
+        projectRoot: resolvedProjectRoot,
+        memoryFilePath,
+      } = await withStore(async () => false, storeOptions(projectRoot));
 
       const status = {
         projectRoot: resolvedProjectRoot,
@@ -71,7 +82,9 @@ export function registerTools(server: McpServer): void {
         revision: store.revision || 0,
         counts: {
           items: Array.isArray(store.items) ? store.items.length : 0,
-          proposals: Array.isArray(store.proposals) ? store.proposals.length : 0,
+          proposals: Array.isArray(store.proposals)
+            ? store.proposals.length
+            : 0,
         },
       };
 
@@ -81,6 +94,7 @@ export function registerTools(server: McpServer): void {
     },
   );
 
+  // memory_search: Search project memory items by keyword and/or tags (approved items only).
   server.registerTool(
     "memory_search",
     {
@@ -91,7 +105,10 @@ export function registerTools(server: McpServer): void {
         limit: z.number().int().min(1).max(50).default(10),
         types: z.array(z.string()).optional().describe("Filter by item types"),
         tags: z.array(z.string()).optional().describe("Filter by tags"),
-        includeContent: z.boolean().default(false).describe("Include full content"),
+        includeContent: z
+          .boolean()
+          .default(false)
+          .describe("Include full content"),
         projectRoot: projectRootInput,
       },
     },
@@ -103,7 +120,10 @@ export function registerTools(server: McpServer): void {
         ? new Set(types.map((t) => validateType(t)))
         : null;
 
-      const { store } = await withStore(async () => false, storeOptions(projectRoot));
+      const { store } = await withStore(
+        async () => false,
+        storeOptions(projectRoot),
+      );
 
       const matches = store.items
         .filter((it) => (typeSet ? typeSet.has(validateType(it.type)) : true))
@@ -131,20 +151,28 @@ export function registerTools(server: McpServer): void {
         content: [
           {
             type: "text",
-            text: JSON.stringify({ count: matches.length, results: matches }, null, 2),
+            text: JSON.stringify(
+              { count: matches.length, results: matches },
+              null,
+              2,
+            ),
           },
         ],
       };
     },
   );
 
+  // memory_get_bundle: Build a compact, ranked context bundle from project memory for the current task.
   server.registerTool(
     "memory_get_bundle",
     {
       description:
         "Build a compact, ranked context bundle from project memory for the current task.",
       inputSchema: {
-        prompt: z.string().min(1).describe("What are you working on right now?"),
+        prompt: z
+          .string()
+          .min(1)
+          .describe("What are you working on right now?"),
         maxItems: z.number().int().min(1).max(50).default(12),
         maxChars: z.number().int().min(500).max(20000).default(6000),
         types: z.array(z.string()).optional().describe("Filter by item types"),
@@ -152,13 +180,23 @@ export function registerTools(server: McpServer): void {
         projectRoot: projectRootInput,
       },
     },
-    async ({ prompt, maxItems, maxChars, types, includePinned, projectRoot }) => {
+    async ({
+      prompt,
+      maxItems,
+      maxChars,
+      types,
+      includePinned,
+      projectRoot,
+    }) => {
       const queryTokens = tokenize(prompt);
       const typeSet = types?.length
         ? new Set(types.map((t) => validateType(t)))
         : null;
 
-      const { store } = await withStore(async () => false, storeOptions(projectRoot));
+      const { store } = await withStore(
+        async () => false,
+        storeOptions(projectRoot),
+      );
 
       const candidates = store.items.filter((it) =>
         typeSet ? typeSet.has(validateType(it.type)) : true,
@@ -179,7 +217,8 @@ export function registerTools(server: McpServer): void {
       out += `Items: ${chosen.length}\n\n`;
 
       for (const it of chosen) {
-        const header = `- [${it.id}] (${it.type}${it.pinned ? ", pinned" : ""}) ${it.title || ""}`.trim();
+        const header =
+          `- [${it.id}] (${it.type}${it.pinned ? ", pinned" : ""}) ${it.title || ""}`.trim();
         const body = safeSnippet(it.content, 800);
         const line = `${header}\n  ${body}\n`;
         if (out.length + line.length > maxChars) break;
@@ -187,13 +226,15 @@ export function registerTools(server: McpServer): void {
       }
 
       if (!chosen.length) {
-        out += "_No matching memory yet. Use `memory_propose` to add project decisions/constraints._\n";
+        out +=
+          "_No matching memory yet. Use `memory_propose` to add project decisions/constraints._\n";
       }
 
       return { content: [{ type: "text", text: out }] };
     },
   );
 
+  // memory_propose: Propose new project memory items (pending approval). Use this for new decisions/constraints/facts you want persisted for this project.
   server.registerTool(
     "memory_propose",
     {
@@ -203,7 +244,12 @@ export function registerTools(server: McpServer): void {
         items: z
           .array(
             z.object({
-              type: z.string().optional().describe("note|decision|fact|constraint|todo|architecture|glossary"),
+              type: z
+                .string()
+                .optional()
+                .describe(
+                  "note|decision|fact|constraint|todo|architecture|glossary",
+                ),
               title: z.string().min(1),
               content: z.string().min(1),
               tags: z.array(z.string()).optional(),
@@ -220,28 +266,25 @@ export function registerTools(server: McpServer): void {
       const createdAt = nowIso();
       const proposalIds: string[] = [];
 
-      await withStore(
-        async (st) => {
-          for (const raw of items) {
-            const proposal: MemoryProposal = {
-              id: newId("prop"),
-              type: validateType(raw.type),
-              title: String(raw.title).trim(),
-              content: String(raw.content).trim(),
-              tags: normalizeTags(raw.tags),
-              pinned: Boolean(raw.pinned),
-              status: "pending",
-              createdAt,
-              updatedAt: createdAt,
-              reason: reason ? String(reason).trim() : "",
-            };
-            st.proposals.push(proposal);
-            proposalIds.push(proposal.id);
-          }
-          return true;
-        },
-        storeOptions(projectRoot),
-      );
+      await withStore(async (st) => {
+        for (const raw of items) {
+          const proposal: MemoryProposal = {
+            id: newId("prop"),
+            type: validateType(raw.type),
+            title: String(raw.title).trim(),
+            content: String(raw.content).trim(),
+            tags: normalizeTags(raw.tags),
+            pinned: Boolean(raw.pinned),
+            status: "pending",
+            createdAt,
+            updatedAt: createdAt,
+            reason: reason ? String(reason).trim() : "",
+          };
+          st.proposals.push(proposal);
+          proposalIds.push(proposal.id);
+        }
+        return true;
+      }, storeOptions(projectRoot));
 
       const text =
         `Proposals created (${proposalIds.length}).\n` +
@@ -252,6 +295,7 @@ export function registerTools(server: McpServer): void {
     },
   );
 
+  // memory_save: Save a memory item directly (no approval step). Use this for finalized context after code changes.
   server.registerTool(
     "memory_save",
     {
@@ -274,32 +318,32 @@ export function registerTools(server: McpServer): void {
       const createdAt = nowIso();
       let itemId = "";
 
-      await withStore(
-        async (st, ctx) => {
-          const item: MemoryItem = {
-            id: newId("mem"),
-            type: validateType(type),
-            title: String(title).trim(),
-            content: String(content).trim(),
-            tags: normalizeTags(tags),
-            pinned: Boolean(pinned),
-            createdAt,
-            updatedAt: createdAt,
-            lastUsedAt: createdAt,
-            source: source ? String(source).trim() : "direct",
-          };
-          st.items.push(item);
-          itemId = item.id;
-          await autoCompactStore(st, ctx);
-          return true;
-        },
-        storeOptions(projectRoot),
-      );
+      await withStore(async (st, ctx) => {
+        const item: MemoryItem = {
+          id: newId("mem"),
+          type: validateType(type),
+          title: String(title).trim(),
+          content: String(content).trim(),
+          tags: normalizeTags(tags),
+          pinned: Boolean(pinned),
+          createdAt,
+          updatedAt: createdAt,
+          lastUsedAt: createdAt,
+          source: source ? String(source).trim() : "direct",
+        };
+        st.items.push(item);
+        itemId = item.id;
+        await autoCompactStore(st, ctx);
+        return true;
+      }, storeOptions(projectRoot));
 
-      return { content: [{ type: "text", text: `Saved memory item ${itemId}` }] };
+      return {
+        content: [{ type: "text", text: `Saved memory item ${itemId}` }],
+      };
     },
   );
 
+  // memory_list_proposals: List pending memory proposals for this project.
   server.registerTool(
     "memory_list_proposals",
     {
@@ -312,7 +356,10 @@ export function registerTools(server: McpServer): void {
       },
     },
     async ({ limit, status, includeContent, projectRoot }) => {
-      const { store } = await withStore(async () => false, storeOptions(projectRoot));
+      const { store } = await withStore(
+        async () => false,
+        storeOptions(projectRoot),
+      );
       const proposals = store.proposals
         .filter((p) => (status ? p.status === status : true))
         .slice(-limit)
@@ -334,13 +381,18 @@ export function registerTools(server: McpServer): void {
         content: [
           {
             type: "text",
-            text: JSON.stringify({ count: proposals.length, proposals }, null, 2),
+            text: JSON.stringify(
+              { count: proposals.length, proposals },
+              null,
+              2,
+            ),
           },
         ],
       };
     },
   );
 
+  // memory_approve_proposal: Approve or reject a memory proposal. Approving persists it as a project memory item.
   server.registerTool(
     "memory_approve_proposal",
     {
@@ -366,60 +418,59 @@ export function registerTools(server: McpServer): void {
       const decidedAt = nowIso();
 
       let resultText = "";
-      await withStore(
-        async (st, ctx) => {
-          const p = st.proposals.find((x) => x.id === proposalId);
-          if (!p) {
-            resultText = `Proposal not found: ${proposalId}`;
-            return false;
-          }
+      await withStore(async (st, ctx) => {
+        const p = st.proposals.find((x) => x.id === proposalId);
+        if (!p) {
+          resultText = `Proposal not found: ${proposalId}`;
+          return false;
+        }
 
-          if (p.status !== "pending") {
-            resultText = `Proposal ${proposalId} is already ${p.status}`;
-            return false;
-          }
+        if (p.status !== "pending") {
+          resultText = `Proposal ${proposalId} is already ${p.status}`;
+          return false;
+        }
 
-          if (edits) {
-            if (edits.type) p.type = validateType(edits.type);
-            if (typeof edits.title === "string") p.title = edits.title.trim();
-            if (typeof edits.content === "string") p.content = edits.content.trim();
-            if (edits.tags) p.tags = normalizeTags(edits.tags);
-            if (typeof edits.pinned === "boolean") p.pinned = edits.pinned;
-          }
+        if (edits) {
+          if (edits.type) p.type = validateType(edits.type);
+          if (typeof edits.title === "string") p.title = edits.title.trim();
+          if (typeof edits.content === "string")
+            p.content = edits.content.trim();
+          if (edits.tags) p.tags = normalizeTags(edits.tags);
+          if (typeof edits.pinned === "boolean") p.pinned = edits.pinned;
+        }
 
-          p.status = action === "approve" ? "approved" : "rejected";
-          p.updatedAt = decidedAt;
+        p.status = action === "approve" ? "approved" : "rejected";
+        p.updatedAt = decidedAt;
 
-          if (action === "approve") {
-            const item: MemoryItem = {
-              id: newId("mem"),
-              type: p.type,
-              title: p.title,
-              content: p.content,
-              tags: p.tags || [],
-              pinned: Boolean(p.pinned),
-              createdAt: decidedAt,
-              updatedAt: decidedAt,
-              lastUsedAt: decidedAt,
-              source: "proposal",
-              proposalId: p.id,
-            };
-            st.items.push(item);
-            await autoCompactStore(st, ctx);
-            resultText = `Approved ${proposalId} -> saved as item ${item.id}`;
-          } else {
-            resultText = `Rejected ${proposalId}`;
-          }
+        if (action === "approve") {
+          const item: MemoryItem = {
+            id: newId("mem"),
+            type: p.type,
+            title: p.title,
+            content: p.content,
+            tags: p.tags || [],
+            pinned: Boolean(p.pinned),
+            createdAt: decidedAt,
+            updatedAt: decidedAt,
+            lastUsedAt: decidedAt,
+            source: "proposal",
+            proposalId: p.id,
+          };
+          st.items.push(item);
+          await autoCompactStore(st, ctx);
+          resultText = `Approved ${proposalId} -> saved as item ${item.id}`;
+        } else {
+          resultText = `Rejected ${proposalId}`;
+        }
 
-          return true;
-        },
-        storeOptions(projectRoot),
-      );
+        return true;
+      }, storeOptions(projectRoot));
 
       return { content: [{ type: "text", text: resultText }] };
     },
   );
 
+  //memory_pin: Pin or unpin an existing memory item.
   server.registerTool(
     "memory_pin",
     {
@@ -432,24 +483,87 @@ export function registerTools(server: McpServer): void {
     },
     async ({ itemId, pinned, projectRoot }) => {
       let msg = "";
-      await withStore(
-        async (st) => {
-          const it = st.items.find((x) => x.id === itemId);
-          if (!it) {
-            msg = `Item not found: ${itemId}`;
-            return false;
-          }
-          it.pinned = Boolean(pinned);
-          it.updatedAt = nowIso();
-          msg = `${pinned ? "Pinned" : "Unpinned"} ${itemId}`;
-          return true;
-        },
-        storeOptions(projectRoot),
-      );
+      await withStore(async (st) => {
+        const it = st.items.find((x) => x.id === itemId);
+        if (!it) {
+          msg = `Item not found: ${itemId}`;
+          return false;
+        }
+        it.pinned = Boolean(pinned);
+        it.updatedAt = nowIso();
+        msg = `${pinned ? "Pinned" : "Unpinned"} ${itemId}`;
+        return true;
+      }, storeOptions(projectRoot));
       return { content: [{ type: "text", text: msg }] };
     },
   );
 
+  //memory_update: Update fields of an existing memory item by ID.
+  server.registerTool(
+    "memory_update",
+    {
+      description: "Update fields of an existing memory item by ID.",
+      inputSchema: {
+        itemId: z.string().min(1),
+        title: z.string().min(1).optional(),
+        content: z.string().min(1).optional(),
+        type: z
+          .string()
+          .optional()
+          .describe("note|decision|fact|constraint|todo|architecture|glossary"),
+        tags: z.array(z.string()).optional(),
+        pinned: z.boolean().optional(),
+        projectRoot: projectRootInput,
+      },
+    },
+    async ({ itemId, title, content, type, tags, pinned, projectRoot }) => {
+      let msg = "";
+      await withStore(async (st) => {
+        const it = st.items.find((x) => x.id === itemId);
+        if (!it) {
+          msg = `Item not found: ${itemId}`;
+          return false;
+        }
+        if (type !== undefined) it.type = validateType(type);
+        if (title !== undefined) it.title = title.trim();
+        if (content !== undefined) it.content = content.trim();
+        if (tags !== undefined) it.tags = normalizeTags(tags);
+        if (pinned !== undefined) it.pinned = Boolean(pinned);
+        it.updatedAt = nowIso();
+        msg = `Updated item ${itemId}`;
+        return true;
+      }, storeOptions(projectRoot));
+      return { content: [{ type: "text", text: msg }] };
+    },
+  );
+
+  //memory_delete: Permanently remove a memory item by ID.
+  server.registerTool(
+    "memory_delete",
+    {
+      description: "Permanently remove a memory item by ID.",
+      inputSchema: {
+        itemId: z.string().min(1),
+        projectRoot: projectRootInput,
+      },
+    },
+    async ({ itemId, projectRoot }) => {
+      let msg = "";
+      await withStore(async (st) => {
+        const idx = st.items.findIndex((x) => x.id === itemId);
+        if (idx === -1) {
+          msg = `Item not found: ${itemId}`;
+          return false;
+        }
+        st.items.splice(idx, 1);
+        msg = `Deleted item ${itemId}`;
+        return true;
+      }, storeOptions(projectRoot));
+      return { content: [{ type: "text", text: msg }] };
+    },
+  );
+
+  //memory_compact: Archive older memory items into a separate file and add a summary entry to keep the main store small.
   server.registerTool(
     "memory_compact",
     {
@@ -466,7 +580,9 @@ export function registerTools(server: McpServer): void {
         archivePath: z
           .string()
           .optional()
-          .describe("Optional override archive file path (default .ai/memory-archive.json)."),
+          .describe(
+            "Optional override archive file path (default .ai/memory-archive.json).",
+          ),
         summaryTitle: z.string().optional(),
         summaryTags: z.array(z.string()).optional(),
         summaryMaxEntries: z
@@ -488,20 +604,17 @@ export function registerTools(server: McpServer): void {
       projectRoot,
     }) => {
       let result: { archived: number; archivePath?: string } = { archived: 0 };
-      await withStore(
-        async (st, ctx) => {
-          result = await compactStoreInPlace(st, ctx, {
-            maxItems,
-            archivePath,
-            summaryTitle,
-            summaryTags,
-            summaryMaxEntries,
-            reason: "manual",
-          });
-          return result.archived > 0;
-        },
-        storeOptions(projectRoot),
-      );
+      await withStore(async (st, ctx) => {
+        result = await compactStoreInPlace(st, ctx, {
+          maxItems,
+          archivePath,
+          summaryTitle,
+          summaryTags,
+          summaryMaxEntries,
+          reason: "manual",
+        });
+        return result.archived > 0;
+      }, storeOptions(projectRoot));
 
       const text =
         result.archived > 0
@@ -509,6 +622,236 @@ export function registerTools(server: McpServer): void {
           : "No compaction needed (store below threshold).";
 
       return { content: [{ type: "text", text }] };
+    },
+  );
+
+  // memory_observe: Push an observation into the suggestion engine for pattern detection.
+  server.registerTool(
+    "memory_observe",
+    {
+      description:
+        "Push an observation into the suggestion engine for pattern detection.",
+      inputSchema: {
+        type: z.enum([
+          "bash_command",
+          "bash_output",
+          "file_edit",
+          "tool_call",
+          "text",
+          "error",
+          "resolution",
+        ]),
+        content: z.string().min(1),
+        toolName: z.string().optional(),
+        metadata: z.record(z.unknown()).optional(),
+        projectRoot: projectRootInput,
+      },
+    },
+    async ({ type, content, toolName, metadata, projectRoot }) => {
+      if (!engine) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                observationRecorded: false,
+                error: "Suggestion engine not available",
+              }),
+            },
+          ],
+        };
+      }
+
+      const obs = {
+        type: type as ObservationType,
+        content: String(content),
+        toolName,
+        timestamp: nowIso(),
+        metadata,
+      };
+
+      const suggestions = await engine.observe(obs, projectRoot);
+
+      const autoSaved: string[] = [];
+      for (const sug of suggestions) {
+        if (sug.autoSave) {
+          const createdAt = nowIso();
+          await withStore(async (st, ctx) => {
+            const item: MemoryItem = {
+              id: newId("mem"),
+              type: validateType(sug.type),
+              title: sug.title,
+              content: sug.content,
+              tags: normalizeTags([...sug.tags, "auto-suggestion"]),
+              pinned: false,
+              createdAt,
+              updatedAt: createdAt,
+              lastUsedAt: createdAt,
+              source: "auto-suggestion",
+            };
+            st.items.push(item);
+            autoSaved.push(item.id);
+            await autoCompactStore(st, ctx);
+            return true;
+          }, storeOptions(projectRoot));
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              observationRecorded: true,
+              suggestionsGenerated: suggestions.length,
+              suggestions,
+              autoSaved,
+            }, null, 2),
+          },
+        ],
+      };
+    },
+  );
+
+  // memory_suggest: Pull pending suggestions from the engine.
+  server.registerTool(
+    "memory_suggest",
+    {
+      description: "Pull pending suggestions from the suggestion engine.",
+      inputSchema: {
+        projectRoot: projectRootInput,
+      },
+    },
+    async () => {
+      if (!engine) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ count: 0, suggestions: [], error: "Suggestion engine not available" }),
+            },
+          ],
+        };
+      }
+
+      const suggestions = engine.getPendingSuggestions();
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              { count: suggestions.length, suggestions },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    },
+  );
+
+  // memory_suggestion_feedback: Accept or reject a suggestion.
+  server.registerTool(
+    "memory_suggestion_feedback",
+    {
+      description:
+        "Accept or reject a suggestion. Accepting saves it as a memory item.",
+      inputSchema: {
+        suggestionId: z.string().min(1),
+        action: z.enum(["accept", "reject"]),
+        edits: z
+          .object({
+            title: z.string().optional(),
+            content: z.string().optional(),
+            tags: z.array(z.string()).optional(),
+            type: z
+              .string()
+              .optional()
+              .describe(
+                "note|decision|fact|constraint|todo|architecture|glossary",
+              ),
+          })
+          .optional()
+          .describe("Optional edits before accepting"),
+        projectRoot: projectRootInput,
+      },
+    },
+    async ({ suggestionId, action, edits, projectRoot }) => {
+      if (!engine) {
+        return {
+          content: [
+            { type: "text", text: "Suggestion engine not available" },
+          ],
+        };
+      }
+
+      if (action === "accept") {
+        const suggestion = await engine.acceptSuggestion(suggestionId);
+        if (!suggestion) {
+          return {
+            content: [
+              { type: "text", text: `Suggestion not found: ${suggestionId}` },
+            ],
+          };
+        }
+
+        const title = edits?.title ?? suggestion.title;
+        const content = edits?.content ?? suggestion.content;
+        const tags = edits?.tags
+          ? normalizeTags([...edits.tags, "suggestion-accepted"])
+          : normalizeTags([...suggestion.tags, "suggestion-accepted"]);
+        const type = edits?.type
+          ? validateType(edits.type)
+          : suggestion.type;
+
+        const createdAt = nowIso();
+        let itemId = "";
+        await withStore(async (st, ctx) => {
+          const item: MemoryItem = {
+            id: newId("mem"),
+            type,
+            title: String(title).trim(),
+            content: String(content).trim(),
+            tags,
+            pinned: false,
+            createdAt,
+            updatedAt: createdAt,
+            lastUsedAt: createdAt,
+            source: "suggestion-accepted",
+          };
+          st.items.push(item);
+          itemId = item.id;
+          await autoCompactStore(st, ctx);
+          return true;
+        }, storeOptions(projectRoot));
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Accepted suggestion ${suggestionId} → saved as item ${itemId}`,
+            },
+          ],
+        };
+      } else {
+        const suggestion = await engine.rejectSuggestion(suggestionId);
+        if (!suggestion) {
+          return {
+            content: [
+              { type: "text", text: `Suggestion not found: ${suggestionId}` },
+            ],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Rejected suggestion ${suggestionId} (feedback updated for ${suggestion.triggeredBy})`,
+            },
+          ],
+        };
+      }
     },
   );
 }

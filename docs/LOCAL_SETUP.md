@@ -194,6 +194,7 @@ Always start Codex from the target repo (`cd /Users/.../opulence_api && codex`) 
 3. Call `memory_save` with test content, then `memory_search` to confirm it appears.
 4. Check `.ai/memory.json` for the saved entry.
 5. Switch to another CLI (e.g., Gemini after Claude) and run `memory_get_bundle` to ensure cross-client sharing works.
+6. Test the suggestion engine: call `memory_observe` with `{"type":"bash_command","content":"npm install express"}` — you should get a suggestion with `triggeredBy: "dependency-change"`. Then call `memory_suggest` to see pending suggestions and `memory_suggestion_feedback` to accept or reject.
 
 ## 8. Troubleshooting checklist
 

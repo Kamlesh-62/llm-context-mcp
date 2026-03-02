@@ -8,6 +8,18 @@ export const LIMITS = {
   maxSnippetChars: 280,  // safeSnippet in domain.ts
 } as const;
 
+export type SuggestionConfig = {
+  notifyThreshold: number;
+  autoSaveThreshold: number;
+  autoSaveEnabled: boolean;
+  maxWindowSize: number;
+  feedbackIncrement: number;
+  feedbackDecrement: number;
+  feedbackMin: number;
+  feedbackMax: number;
+  feedbackRelPath: string;
+};
+
 export type AutoCompactConfig = {
   enabled: boolean;
   maxItems: number;
@@ -28,6 +40,7 @@ export type Config = {
   maxLockRetryDelayMs: number;
   maxContentSnippetChars: number;
   autoCompact: AutoCompactConfig;
+  suggestions: SuggestionConfig;
 };
 
 export const CONFIG: Config = {
@@ -39,6 +52,17 @@ export const CONFIG: Config = {
   lockRetryBackoff: 1.25,
   maxLockRetryDelayMs: 250,
   maxContentSnippetChars: LIMITS.maxSnippetChars,
+  suggestions: {
+    notifyThreshold: 3,
+    autoSaveThreshold: 5,
+    autoSaveEnabled: false,
+    maxWindowSize: 50,
+    feedbackIncrement: 0.15,
+    feedbackDecrement: 0.2,
+    feedbackMin: 0.3,
+    feedbackMax: 2.0,
+    feedbackRelPath: ".ai/suggestion-feedback.json",
+  },
   autoCompact: {
     enabled: true,
     maxItems: 400,

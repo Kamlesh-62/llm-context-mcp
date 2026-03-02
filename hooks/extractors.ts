@@ -16,12 +16,12 @@ type ExtractedItem = {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-const RE_VERSION = /\b(node|npm|python|pip|ruby|go|java|rustc|cargo|bun|deno|pnpm|yarn)\s+(-v|--version|version)\b/i;
-const RE_VERSION_OUTPUT = /v?\d+\.\d+\.\d+/;
-const RE_COMMIT = /git\s+commit\s.*?-m\s+["'](.+?)["']/;
-const RE_NPM_INSTALL = /\b(npm|yarn|pnpm|bun)\s+(install|add|i)\s+(\S+)/;
-const RE_PIP_INSTALL = /\b(pip|pip3)\s+install\s+(\S+)/;
-const RE_CARGO_ADD = /\bcargo\s+add\s+(\S+)/;
+export const RE_VERSION = /\b(node|npm|python|pip|ruby|go|java|rustc|cargo|bun|deno|pnpm|yarn)\s+(-v|--version|version)\b/i;
+export const RE_VERSION_OUTPUT = /v?\d+\.\d+\.\d+/;
+export const RE_COMMIT = /git\s+commit\s.*?-m\s+["'](.+?)["']/;
+export const RE_NPM_INSTALL = /\b(npm|yarn|pnpm|bun)\s+(install|add|i)\s+(\S+)/;
+export const RE_PIP_INSTALL = /\b(pip|pip3)\s+install\s+(\S+)/;
+export const RE_CARGO_ADD = /\bcargo\s+add\s+(\S+)/;
 
 /**
  * Extract the role and content from a transcript JSONL line.

@@ -116,8 +116,11 @@ cd project-memory-mcp-js && npm install && npm run build && npm start
 | Load context before a task | `memory_get_bundle` |
 | Save something to memory | `memory_save` |
 | Search past memory | `memory_search` |
+| Push observations for suggestions | `memory_observe` |
+| Review pending suggestions | `memory_suggest` |
+| Accept/reject a suggestion | `memory_suggestion_feedback` |
 
-That's the core loop: **get bundle → do work → save what matters**.
+That's the core loop: **get bundle → do work → save what matters**. The suggestion engine can also detect patterns (dependency installs, version checks, error→fix cycles) mid-session and proactively nudge you to save.
 
 ---
 
@@ -227,6 +230,18 @@ Call `memory_get_bundle` with prompt "I am fixing login API bugs" and maxItems 1
 
 </details>
 
+### Suggestion Engine (mid-session)
+
+The server includes a live suggestion engine that detects patterns and nudges you to save useful context:
+
+1. **Push observations** — call `memory_observe` with `{"type":"bash_command","content":"npm install axios"}` after running commands.
+2. **Engine matches rules** — version checks, dependency changes, deploys, error→fix cycles, config file edits.
+3. **Scoring** — `base_weight × recency_boost × feedback_multiplier`. Only suggestions scoring >= 3 are surfaced.
+4. **Review** — call `memory_suggest` to see pending suggestions, then `memory_suggestion_feedback` to accept or reject.
+5. **Feedback loop** — accepts increase the scoring weight for that category; rejects decrease it. Weights persist in `.ai/suggestion-feedback.json`.
+
+High-confidence suggestions (score >= 5) can optionally auto-save when `autoSaveEnabled` is turned on in config.
+
 ### Automatic compaction & archives
 
 - The server automatically compacts when more than **400** active items exist (see `CONFIG.autoCompact`). Oldest entries are moved to `.ai/memory-archive.json`, and a summary note is added so you still know what was archived.
@@ -265,13 +280,28 @@ Call `memory_get_bundle` with prompt "I am fixing login API bugs" and maxItems 1
 | `memory_propose` | Create proposals (pending approval) |
 | `memory_approve_proposal` | Approve/reject proposal, optional edits |
 
+### Modify / Delete
+
+| Tool | Purpose |
+|---|---|
+| `memory_update` | Update fields of an existing item by ID |
+| `memory_delete` | Permanently remove an item by ID |
+
+### Suggestion Engine
+
+| Tool | Purpose |
+|---|---|
+| `memory_observe` | Push an observation (bash command, file edit, error, etc.) for pattern detection |
+| `memory_suggest` | Pull pending suggestions from the engine |
+| `memory_suggestion_feedback` | Accept or reject a suggestion (accepted suggestions are saved to memory) |
+
 ### Maintenance
 
 | Tool | Purpose |
 |---|---|
 | `memory_compact` | Archive older items into `.ai/memory-archive.json` and add a summary note, keeping the active store lean |
 
-All write tools accept an optional `projectRoot` input for multi-project routing.
+All tools accept an optional `projectRoot` input for multi-project routing.
 
 </details>
 
@@ -287,7 +317,12 @@ All write tools accept an optional `projectRoot` input for multi-project routing
 | `memory_propose` | `Call memory_propose with {"items":[...],"reason":"code review"}` | Use when you want an approval step before saving. |
 | `memory_approve_proposal` | `Call memory_approve_proposal with {"proposalId":"prop_...","action":"approve"}` | Include `edits` to tweak proposal content before approval. |
 | `memory_pin` | `Call memory_pin with {"itemId":"mem_...","pinned":true}` | Pinning keeps key notes surfaced in bundles. |
+| `memory_update` | `Call memory_update with {"itemId":"mem_...","title":"new title"}` | Update title, content, type, tags, or pinned status. |
+| `memory_delete` | `Call memory_delete with {"itemId":"mem_..."}` | Permanently removes the item from the store. |
 | `memory_compact` | `Call memory_compact with {"maxItems":250}` | Keeps the active store lean; omit payload to use defaults. |
+| `memory_observe` | `Call memory_observe with {"type":"bash_command","content":"npm install axios"}` | Pushes an observation; returns any triggered suggestions. |
+| `memory_suggest` | `Call memory_suggest` | Lists pending suggestions waiting for review. |
+| `memory_suggestion_feedback` | `Call memory_suggestion_feedback with {"suggestionId":"sug_...","action":"accept"}` | Accepts (saves to memory) or rejects (adjusts scoring weights). |
 
 Usage tips:
 
@@ -329,13 +364,9 @@ Storage path:
 <details>
 <summary><strong>Update and Delete</strong></summary>
 
-There is no `memory_update` or `memory_delete` tool yet.
-
-**To update:** save a corrected item with `memory_save`. Add a tag like `supersedes:<old_id>` and optionally `memory_pin` the new one.
-
-**To delete all:** `rm -f <projectRoot>/.ai/memory.json`
-
-**To delete one item:** manually edit the `items` array in the JSON file.
+- **Update an item:** `Call memory_update with {"itemId":"mem_...","title":"corrected title","content":"new content"}`. You can update any combination of `title`, `content`, `type`, `tags`, and `pinned`.
+- **Delete one item:** `Call memory_delete with {"itemId":"mem_..."}`. Permanently removes it from the store.
+- **Delete all:** `rm -f <projectRoot>/.ai/memory.json`
 
 </details>
 
@@ -366,12 +397,17 @@ server.ts              # entrypoint (source)
 dist/server.js         # entrypoint (runtime)
 src/main.ts            # MCP bootstrap and transport connection
 src/tools.ts           # tool registration and handlers
+src/suggestions.ts     # suggestion engine (rules, scoring, feedback)
+src/prompts.ts         # MCP prompt (slash command) registration
 src/storage.ts         # lock, load/write, atomic persistence
 src/runtime.ts         # project root/path resolution
 src/domain.ts          # scoring/tokenization/validation helpers
-src/config.ts          # constants
+src/config.ts          # constants + suggestion config
+src/maintenance.ts     # auto-compaction and archiving
 src/logger.ts          # stderr logger
-.ai/memory.json        # persisted project memory (per project)
+hooks/extractors.ts    # heuristic extractors (versions, deps, errors)
+.ai/memory.json              # persisted project memory (per project)
+.ai/suggestion-feedback.json # suggestion scoring weights (per project)
 ```
 
 Add `.ai/` to `.gitignore` if you don't want memory committed to the repo.

@@ -1,3 +1,4 @@
+import type { BackendKind } from "./storage/backend.js";
 import type { MemoryType } from "./types.js";
 
 export const LIMITS = {
@@ -20,6 +21,12 @@ export type SuggestionConfig = {
   feedbackRelPath: string;
 };
 
+export type StorageConfig = {
+  backend: BackendKind;
+  sqliteRelPath: string;
+  busyTimeoutMs: number;
+};
+
 export type AutoCompactConfig = {
   enabled: boolean;
   maxItems: number;
@@ -40,6 +47,7 @@ export type Config = {
   maxLockRetryDelayMs: number;
   maxContentSnippetChars: number;
   staleDays: number;
+  storage: StorageConfig;
   autoCompact: AutoCompactConfig;
   suggestions: SuggestionConfig;
 };
@@ -54,6 +62,11 @@ export const CONFIG: Config = {
   maxLockRetryDelayMs: 250,
   maxContentSnippetChars: LIMITS.maxSnippetChars,
   staleDays: 90,
+  storage: {
+    backend: "json",
+    sqliteRelPath: ".ai/memory.sqlite",
+    busyTimeoutMs: 2500,
+  },
   suggestions: {
     notifyThreshold: 3,
     autoSaveThreshold: 5,

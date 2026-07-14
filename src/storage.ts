@@ -1,9 +1,5 @@
-import {
-  findProjectRoot,
-  normalizeProjectRoot,
-  nowIso,
-  resolveMemoryFilePath,
-} from "./runtime.js";
+import { findProjectRoot, normalizeProjectRoot, nowIso } from "./runtime.js";
+import { resolveStoreLocation } from "./storage/config.js";
 import { JsonBackend } from "./storage/json-backend.js";
 import type { BackendKind, StorageBackend } from "./storage/backend.js";
 import type { Store, StoreContext, StoreWriteResult } from "./types.js";
@@ -20,6 +16,10 @@ function getBackend(kind: BackendKind): StorageBackend {
   switch (kind) {
     case "json":
       return jsonBackend;
+    case "sqlite":
+      throw new Error(
+        'Storage backend "sqlite" is selected but not yet built. Set storage.backend to "json" or update project-memory-mcp.',
+      );
     default:
       throw new Error(`Storage backend "${kind}" is not available in this build`);
   }
@@ -39,10 +39,11 @@ export async function withStore(
 ): Promise<StoreWriteResult> {
   const projectRoot =
     normalizeProjectRoot(options.projectRoot) || (await findProjectRoot());
-  const memoryFilePath = resolveMemoryFilePath(projectRoot);
+  const location = await resolveStoreLocation(projectRoot);
+  const memoryFilePath = location.path;
   const ctx: StoreContext = { projectRoot, memoryFilePath };
 
-  const backend = getBackend("json");
+  const backend = getBackend(location.backend);
   const session = await backend.begin(ctx);
   try {
     const updated = await writeFn(session.store, ctx);

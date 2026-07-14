@@ -96,7 +96,7 @@ export function registerReadTools(server: McpServer): void {
       let matches: Array<{ item: typeof store.items[0]; score: number }> = [];
       let store: Awaited<ReturnType<typeof withStore>>["store"];
 
-      const result = await withStore(
+      await withStore(
         async (st) => {
           store = st;
           let items = st.items.filter((it) => !isExpired(it));
@@ -134,7 +134,6 @@ export function registerReadTools(server: McpServer): void {
         },
         storeOptions(projectRoot),
       );
-      store = result.store;
 
       const output = matches.map(({ item, score }) => ({
         id: item.id,
@@ -199,7 +198,7 @@ export function registerReadTools(server: McpServer): void {
       let chosen: typeof store.items = [];
       let store: Awaited<ReturnType<typeof withStore>>["store"];
 
-      const result = await withStore(
+      await withStore(
         async (st) => {
           store = st;
           const active = st.items.filter((it) => !isExpired(it));
@@ -230,7 +229,6 @@ export function registerReadTools(server: McpServer): void {
         },
         storeOptions(projectRoot),
       );
-      store = result.store;
 
       let out = "# Project Memory Bundle\n\n";
       out += `Generated: ${now}\n`;

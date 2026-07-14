@@ -55,6 +55,15 @@ async function run(): Promise<void> {
     return;
   }
 
+  if (command === "migrate") {
+    const { runMigrate } = await import("./src/cli/migrate.js");
+    const exitCode = await runMigrate(process.argv.slice(3));
+    if (typeof exitCode === "number" && exitCode !== 0) {
+      process.exitCode = exitCode;
+    }
+    return;
+  }
+
   if (command === "help" || command === "--help" || command === "-h") {
     printUsage();
     return;
@@ -73,6 +82,8 @@ Usage:
   project-memory-mcp setup [...]   Run the interactive CLI configuration wizard
   project-memory-mcp switch [...]  Re-apply saved config to CLIs (no prompts)
   project-memory-mcp doctor [...]  Run health checks on project setup
+  project-memory-mcp migrate --to <json|sqlite> [--dry-run] [--force] [--set-default]
+                                   Migrate memory between storage backends
   project-memory-mcp help          Show this message
 `.trim());
 }

@@ -14,7 +14,7 @@ const sqliteBackend = new SqliteBackend();
  * unbuilt backend fails loudly rather than silently falling back to JSON, which
  * would fragment a project's memory across two stores.
  */
-function getBackend(kind: BackendKind): StorageBackend {
+export function getBackend(kind: BackendKind): StorageBackend {
   switch (kind) {
     case "json":
       return jsonBackend;

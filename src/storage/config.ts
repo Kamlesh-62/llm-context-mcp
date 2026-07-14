@@ -59,6 +59,11 @@ function resolveSqlitePath(projectRoot: string): string {
   return path.join(projectRoot, CONFIG.storage.sqliteRelPath);
 }
 
+/** Resolve the on-disk path a given backend would use for a project. */
+export function storePathFor(backend: BackendKind, projectRoot: string): string {
+  return backend === "sqlite" ? resolveSqlitePath(projectRoot) : resolveMemoryFilePath(projectRoot);
+}
+
 /**
  * Decide which backend serves a project and where its data lives.
  *

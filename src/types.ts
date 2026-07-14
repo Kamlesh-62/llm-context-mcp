@@ -46,7 +46,7 @@ export interface StoreProject {
 }
 
 export interface Store {
-  version: 1;
+  version: number;
   project: StoreProject;
   items: MemoryItem[];
   proposals: MemoryProposal[];

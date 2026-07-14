@@ -1,10 +1,12 @@
 import { findProjectRoot, normalizeProjectRoot, nowIso } from "./runtime.js";
 import { resolveStoreLocation } from "./storage/config.js";
 import { JsonBackend } from "./storage/json-backend.js";
+import { SqliteBackend } from "./storage/sqlite-backend.js";
 import type { BackendKind, StorageBackend } from "./storage/backend.js";
 import type { Store, StoreContext, StoreWriteResult } from "./types.js";
 
 const jsonBackend = new JsonBackend();
+const sqliteBackend = new SqliteBackend();
 
 /**
  * Resolve a backend implementation by kind. Only JSON exists today; the SQLite
@@ -17,9 +19,7 @@ function getBackend(kind: BackendKind): StorageBackend {
     case "json":
       return jsonBackend;
     case "sqlite":
-      throw new Error(
-        'Storage backend "sqlite" is selected but not yet built. Set storage.backend to "json" or update project-memory-mcp.',
-      );
+      return sqliteBackend;
     default:
       throw new Error(`Storage backend "${kind}" is not available in this build`);
   }

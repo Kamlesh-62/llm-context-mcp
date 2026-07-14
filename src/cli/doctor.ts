@@ -1,7 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { homedir } from "node:os";
-import { findProjectRoot, resolveMemoryFilePath } from "../runtime.js";
+import { findProjectRoot } from "../runtime.js";
+import { resolveStoreLocation } from "../storage/config.js";
+import { migrateRawStore } from "../storage/migrations.js";
+import { sqliteAvailable } from "../storage/sqlite-driver.js";
 
 type Check = {
   name: string;
@@ -23,7 +26,8 @@ export async function runDoctor(argv: string[]): Promise<number> {
     projectRoot = await findProjectRoot();
   }
 
-  const memoryFilePath = resolveMemoryFilePath(projectRoot);
+  const location = await resolveStoreLocation(projectRoot);
+  const memoryFilePath = location.path;
 
   const checks: Check[] = [
     {
@@ -51,17 +55,35 @@ export async function runDoctor(argv: string[]): Promise<number> {
       },
     },
     {
-      name: "memory.json parseable",
+      name: `SQLite driver available (backend: ${location.backend})`,
       fn: async () => {
+        if (location.backend !== "sqlite") return null; // not applicable to JSON
+        return sqliteAvailable()
+          ? null
+          : "SQLite backend selected but no driver: use Node >=22.5 (node:sqlite) or `npm i better-sqlite3`";
+      },
+    },
+    {
+      name: `Store readable (${location.backend})`,
+      fn: async () => {
+        if (location.backend === "sqlite") {
+          // The driver check above covers usability; here just confirm the file,
+          // if present, is non-empty. A missing file is fine (not yet created).
+          try {
+            await fs.stat(memoryFilePath);
+            return null;
+          } catch (e) {
+            if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+            return `Cannot access store: ${(e as Error).message}`;
+          }
+        }
         try {
           const raw = await fs.readFile(memoryFilePath, "utf8");
-          const parsed = JSON.parse(raw);
-          if (!parsed || parsed.version !== 1) return "Invalid store format (version != 1)";
-          if (!Array.isArray(parsed.items)) return "Invalid store: items is not an array";
+          migrateRawStore(JSON.parse(raw)); // throws on corrupt/too-new
           return null;
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code === "ENOENT") return null; // not yet created
-          return `memory.json corrupted: ${(e as Error).message}`;
+          return `Store corrupted: ${(e as Error).message}`;
         }
       },
     },

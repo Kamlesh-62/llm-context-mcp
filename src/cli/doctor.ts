@@ -5,6 +5,7 @@ import { findProjectRoot } from "../runtime.js";
 import { resolveStoreLocation } from "../storage/config.js";
 import { migrateRawStore } from "../storage/migrations.js";
 import { sqliteAvailable } from "../storage/sqlite-driver.js";
+import { claudeStopHookInstalled, resolveHookScriptPath } from "./hooks-install.js";
 
 type Check = {
   name: string;
@@ -84,6 +85,33 @@ export async function runDoctor(argv: string[]): Promise<number> {
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code === "ENOENT") return null; // not yet created
           return `Store corrupted: ${(e as Error).message}`;
+        }
+      },
+    },
+    {
+      name: "Auto-save hook (Claude Stop)",
+      fn: async () => {
+        const installed = await claudeStopHookInstalled(projectRoot);
+        if (!installed) {
+          return "No Stop hook in .claude/settings.json — auto-save will not run. Run `setup` or add it manually.";
+        }
+        try {
+          await fs.access(resolveHookScriptPath("auto-memory"));
+          return null;
+        } catch {
+          return `Stop hook is registered but its script is missing: ${resolveHookScriptPath("auto-memory")}`;
+        }
+      },
+    },
+    {
+      name: "Auto-save cursor (has the hook ever run?)",
+      fn: async () => {
+        const cursorPath = path.join(projectRoot, ".ai", ".auto-save-cursor.json");
+        try {
+          await fs.access(cursorPath);
+          return null;
+        } catch {
+          return `No cursor file yet (${cursorPath}) — the auto-save hook has not run in this project.`;
         }
       },
     },

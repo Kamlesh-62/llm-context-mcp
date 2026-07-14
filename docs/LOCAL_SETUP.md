@@ -206,9 +206,20 @@ Always start Codex from the target repo (`cd /Users/.../opulence_api && codex`) 
 | Writes not saving | Make sure you called `memory_save` or approved proposals; check `.ai` folder permissions |
 | Lock errors | Check for stale `.ai/memory.json.lock` file and remove after ensuring no other process is running |
 
-## 9. Optional auto-save hooks
+## 9. Auto-save hooks
 
-Leave the provided hook configs inside your project to capture info automatically when sessions end:
+> **Easiest path:** run `project-memory-mcp setup` and answer **Yes** to
+> "Install auto-save memory hooks?". This writes the Claude `Stop` hook into your
+> project's `.claude/settings.json` (pointing at the installed package's
+> `dist/hooks/auto-memory.js`) and appends Codex's `notify` to `~/.codex/config.toml`.
+> Registering the MCP server alone does **not** install these — the hook is separate.
+>
+> **npm installs:** the hook command must point at the package inside
+> `node_modules` (e.g. `node "…/node_modules/context-bridge-mcp/dist/hooks/auto-memory.js" stop`),
+> **not** `$CLAUDE_PROJECT_DIR/dist/...`. The `setup` installer resolves this path
+> for you. Verify with `project-memory-mcp doctor`.
+
+Or wire the hook configs manually to capture info automatically when sessions end:
 
 - `.claude/settings.json` – runs `dist/hooks/auto-save.js` after Claude sessions.
 - `.gemini/settings.json` – registers a `SessionEnd` hook for Gemini.

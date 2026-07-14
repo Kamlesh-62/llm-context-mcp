@@ -5,6 +5,7 @@ import type { CliSelection, ParsedArgs } from "./types.js";
 import { parseArgs, printHelp } from "./args.js";
 import { resolveRunner, snapshotRunner } from "./runners.js";
 import { configureClaude, configureGemini, configureCodex, checkExistingClaudeEntry } from "./config-writers.js";
+import { installClaudeStopHook, installCodexNotify } from "./hooks-install.js";
 import {
   errorMessage,
   resolvePath,
@@ -103,6 +104,31 @@ export async function runSetup(argv: string[] = []): Promise<number> {
           configureCodex({ projectRoot, runner, serverId }),
         ),
       );
+    }
+
+    // Auto-save hooks capture memory from session transcripts. Registering the
+    // MCP server does NOT install these — they must be wired separately.
+    const wantHooks =
+      parsedArgs.acceptDefaults ||
+      (await askYesNo(rl, "Install auto-save memory hooks? (Y/n): ", true, parsedArgs));
+    if (wantHooks) {
+      if (selection.claude) {
+        steps.push(
+          await executeStep("Claude auto-save hook", async () => {
+            const p = await installClaudeStopHook(projectRoot);
+            console.log(`  Stop hook written to ${p}`);
+          }),
+        );
+      }
+      if (selection.codex) {
+        steps.push(
+          await executeStep("Codex auto-save hook", async () => {
+            const r = await installCodexNotify();
+            if (r.status === "added") console.log(`  notify added to ${r.configPath}`);
+            else console.log(`  ${r.configPath} already has a notify entry — leaving it. Recommended: ${r.recommended}`);
+          }),
+        );
+      }
     }
 
     const failures = steps.filter((step) => !step.ok);

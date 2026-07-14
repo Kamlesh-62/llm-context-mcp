@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import type { CliSelection, ParsedArgs, ProjectDefaults, SavedRunner, StepResult } from "./types.js";
+import type { CliSelection, ParsedArgs, ProjectDefaults, StepResult } from "./types.js";
 
 export const SERVER_ID_PATTERN = /^[a-z0-9-]{3,32}$/;
 export const CLI_LABELS = {

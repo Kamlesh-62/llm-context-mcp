@@ -15,7 +15,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:hooks": "node dist/scripts/test-hooks.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "prepublishOnly": "npm run build && npm run test:hooks"
   },
   "keywords": [
@@ -45,7 +52,13 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^20.11.0",
-    "typescript": "^5.4.0"
+    "eslint": "^10.0.2",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
+    "typescript": "^5.4.0",
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.0.18"
   }
 }

@@ -45,7 +45,7 @@ export async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-export async function readTranscriptLines(transcriptPath: string): Promise<unknown[]> {
+export async function readTranscriptLines(transcriptPath: string): Promise<Record<string, unknown>[]> {
   const raw = await readFile(transcriptPath, "utf8");
   const trimmed = raw.trim();
   if (!trimmed) return [];

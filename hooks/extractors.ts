@@ -6,7 +6,7 @@
 
 import type { MemoryType } from "../src/types.js";
 
-type TranscriptLine = Record<string, any>;
+export type TranscriptLine = Record<string, unknown>;
 type ExtractedItem = {
   type: MemoryType;
   title: string;
@@ -39,7 +39,7 @@ function normalizeRole(role: string | undefined): string | undefined {
 function normalizeContent(
   content: unknown,
   parts: Array<{ text?: string } | string> | undefined,
-): string | any[] | null {
+): string | unknown[] | null {
   if (Array.isArray(content)) return content;
   if (typeof content === "string") return content;
   if (Array.isArray(parts)) {
@@ -57,24 +57,27 @@ function normalizeContent(
 
 function unwrap(
   line: TranscriptLine,
-): { role: string | undefined; content: string | any[] } | null {
+): { role: string | undefined; content: string | unknown[] } | null {
+  // Transcript lines have wildly varying shapes across CLIs — use loose typing internally
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const l = line as Record<string, any>;
   // Direct message lines (type: "assistant" | "user")
-  if (line.message?.role) {
-    const content = normalizeContent(line.message.content, line.message.parts);
+  if (l.message?.role) {
+    const content = normalizeContent(l.message.content, l.message.parts);
     if (content !== null) {
-      return { role: normalizeRole(line.message.role), content };
+      return { role: normalizeRole(l.message.role), content };
     }
   }
   // Lines with type but no message wrapper (type: "assistant" | "user" with direct content)
-  if ((line.type === "assistant" || line.type === "user") && line.content !== undefined) {
-    const content = normalizeContent(line.content, line.parts);
+  if ((l.type === "assistant" || l.type === "user") && l.content !== undefined) {
+    const content = normalizeContent(l.content, l.parts);
     if (content !== null) {
-      return { role: normalizeRole(line.type), content };
+      return { role: normalizeRole(l.type as string), content };
     }
   }
   // Progress lines (subagent tool calls/results)
-  if (line.type === "progress" && line.data?.message?.message) {
-    const inner = line.data.message.message;
+  if (l.type === "progress" && l.data?.message?.message) {
+    const inner = l.data.message.message;
     if (inner.role && inner.content) {
       const content = normalizeContent(inner.content, inner.parts);
       if (content !== null) {
@@ -83,21 +86,24 @@ function unwrap(
     }
   }
   // Fallback: already unwrapped
-  if (line.role) {
-    const content = normalizeContent(line.content, line.parts);
+  if (l.role) {
+    const content = normalizeContent(l.content, l.parts);
     if (content !== null) {
-      return { role: normalizeRole(line.role), content };
+      return { role: normalizeRole(l.role), content };
     }
   }
   return null;
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ContentBlock = Record<string, any>;
 
 function bashToolCalls(lines: TranscriptLine[]) {
   const results: Array<{ id: string; command: string }> = [];
   for (const line of lines) {
     const msg = unwrap(line);
     if (!msg || msg.role !== "assistant") continue;
-    const content = Array.isArray(msg.content) ? msg.content : [];
+    const content = (Array.isArray(msg.content) ? msg.content : []) as ContentBlock[];
     for (const block of content) {
       if (block.type !== "tool_use" || block.name !== "Bash") continue;
       results.push({ id: block.id, command: block.input?.command ?? "" });
@@ -111,7 +117,7 @@ function toolResults(lines: TranscriptLine[]) {
   for (const line of lines) {
     const msg = unwrap(line);
     if (!msg || msg.role !== "user") continue;
-    const content = Array.isArray(msg.content) ? msg.content : [];
+    const content = (Array.isArray(msg.content) ? msg.content : []) as ContentBlock[];
     for (const block of content) {
       if (block.type === "tool_result") {
         results.push({ toolUseId: block.tool_use_id, text: block.content ?? "" });
@@ -259,7 +265,7 @@ export function extractFileChanges(lines: TranscriptLine[]): ExtractedItem[] {
   for (const line of lines) {
     const msg = unwrap(line);
     if (!msg || msg.role !== "assistant") continue;
-    const content = Array.isArray(msg.content) ? msg.content : [];
+    const content = (Array.isArray(msg.content) ? msg.content : []) as ContentBlock[];
     for (const block of content) {
       if (block.type !== "tool_use") continue;
       if (block.name === "Write" || block.name === "Edit") {
@@ -292,13 +298,13 @@ const DECISION_PATTERNS: Array<{ re: RegExp; type: MemoryType }> = [
 ];
 
 function extractTextFromContent(
-  content: string | any[],
+  content: string | unknown[],
 ): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
-  return content
+  return (content as ContentBlock[])
     .filter((block) => block.type === "text" && typeof block.text === "string")
-    .map((block) => block.text)
+    .map((block) => block.text as string)
     .join(" ");
 }
 

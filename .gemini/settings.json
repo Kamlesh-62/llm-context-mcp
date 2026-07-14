@@ -26,6 +26,13 @@
         "project-memory-mcp"
       ],
       "trust": true
+    },
+    "npm-project-mcp": {
+      "command": "npx",
+      "args": [
+        "project-memory-mcp"
+      ],
+      "trust": true
     }
   }
 }

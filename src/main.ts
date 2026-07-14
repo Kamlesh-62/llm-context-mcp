@@ -25,7 +25,7 @@ export async function main() {
 
   const projectRoot = await findProjectRoot();
   const memoryFilePath = resolveMemoryFilePath(projectRoot);
-  engine.setProjectRoot(projectRoot);
+  await engine.setProjectRoot(projectRoot);
 
   log("running on stdio");
   log("projectRoot:", projectRoot);

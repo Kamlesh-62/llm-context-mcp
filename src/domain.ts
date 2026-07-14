@@ -44,7 +44,7 @@ export function scoreItem(
 export function tokenize(s: unknown): string[] {
   return String(s || "")
     .toLowerCase()
-    .split(/[^a-z0-9_\-]+/i)
+    .split(/[^a-z0-9_-]+/i)
     .map((x) => x.trim())
     .filter((x) => x.length >= 2)
     .slice(0, 40);
@@ -54,6 +54,33 @@ export function newId(prefix: string): string {
   // short, stable-ish id for CLI readability
   const id = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
   return `${prefix}_${id}`;
+}
+
+export function findSimilarItems(
+  items: MemoryItem[],
+  title: string,
+  content: string,
+  threshold = 0.5,
+): Array<{ item: MemoryItem; similarity: number }> {
+  const queryTokens = tokenize(`${title} ${content}`);
+  if (queryTokens.length === 0) return [];
+
+  return items
+    .map((item) => {
+      const itemTokens = tokenize(`${item.title} ${item.content}`);
+      if (itemTokens.length === 0) return { item, similarity: 0 };
+      const overlap = queryTokens.filter((t) => itemTokens.includes(t)).length;
+      const similarity = overlap / Math.max(queryTokens.length, itemTokens.length);
+      return { item, similarity };
+    })
+    .filter((x) => x.similarity >= threshold)
+    .sort((a, b) => b.similarity - a.similarity);
+}
+
+export function isExpired(item: MemoryItem): boolean {
+  if (!item.expiresAt) return false;
+  const exp = Date.parse(item.expiresAt);
+  return Number.isFinite(exp) && exp < Date.now();
 }
 
 export function validateType(type: unknown): MemoryType {

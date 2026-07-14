@@ -46,6 +46,15 @@ async function run(): Promise<void> {
     return;
   }
 
+  if (command === "doctor") {
+    const { runDoctor } = await import("./src/cli/doctor.js");
+    const exitCode = await runDoctor(process.argv.slice(3));
+    if (typeof exitCode === "number" && exitCode !== 0) {
+      process.exitCode = exitCode;
+    }
+    return;
+  }
+
   if (command === "help" || command === "--help" || command === "-h") {
     printUsage();
     return;
@@ -63,6 +72,7 @@ Usage:
   project-memory-mcp serve         Explicitly start the MCP server
   project-memory-mcp setup [...]   Run the interactive CLI configuration wizard
   project-memory-mcp switch [...]  Re-apply saved config to CLIs (no prompts)
+  project-memory-mcp doctor [...]  Run health checks on project setup
   project-memory-mcp help          Show this message
 `.trim());
 }

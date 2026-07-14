@@ -24,12 +24,13 @@ export async function configureClaude({
   serverId: string;
 }): Promise<void> {
   const { data, raw } = await loadJson(CLAUDE_CONFIG_PATH);
-  const config = isPlainObject(data) ? data : {};
+  const config = isPlainObject(data) ? data : {} as Record<string, unknown>;
   if (!isPlainObject(config.mcpServers)) {
     config.mcpServers = {};
   }
 
-  config.mcpServers[serverId] = {
+  const servers = config.mcpServers as Record<string, unknown>;
+  servers[serverId] = {
     command: runner.command,
     args: runner.args,
     cwd: projectRoot,

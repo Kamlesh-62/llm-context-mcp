@@ -19,6 +19,7 @@ export interface MemoryItem {
   updatedAt: string;
   lastUsedAt?: string;
   proposalId?: string;
+  expiresAt?: string;
   archivedAt?: string;
   archivedReason?: string;
 }

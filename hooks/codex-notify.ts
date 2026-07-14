@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import os from "node:os";
 
 function parseArgs(argv: string[]): { historyPath: string | null; projectDir: string | null } {
-  const args = { historyPath: null, projectDir: null };
+  const args: { historyPath: string | null; projectDir: string | null } = { historyPath: null, projectDir: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--history" && argv[i + 1]) {

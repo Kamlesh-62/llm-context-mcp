@@ -1,7 +1,7 @@
 import process from "node:process";
 
 import type { CliSelection, CommonArgs } from "./types.js";
-import { tryParseCommonToken, requireValue } from "./args.js";
+import { tryParseCommonToken } from "./args.js";
 import { restoreSavedRunner, cloneRunner } from "./runners.js";
 import { configureClaude, configureGemini, configureCodex } from "./config-writers.js";
 import {

@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -14,7 +15,7 @@ import type {
   SuggestionRule,
 } from "./types.js";
 import { RULES } from "./rules.js";
-import { defaultFeedback, loadFeedbackFromDisk, saveFeedbackToDisk } from "./feedback.js";
+import { loadFeedbackFromDisk, saveFeedbackToDisk } from "./feedback.js";
 
 export class SuggestionEngine {
   private config: SuggestionConfig;
@@ -33,9 +34,24 @@ export class SuggestionEngine {
     this.server = server;
   }
 
-  setProjectRoot(projectRoot: string): void {
+  async setProjectRoot(projectRoot: string): Promise<void> {
     this.projectRoot = projectRoot;
     this.feedbackPath = path.join(projectRoot, this.config.feedbackRelPath);
+
+    // Load per-project suggestion overrides from .ai/memory-mcp.json
+    try {
+      const configPath = path.join(projectRoot, ".ai", "memory-mcp.json");
+      const raw = await fs.readFile(configPath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && typeof parsed.suggestions === "object" && parsed.suggestions !== null) {
+        const overrides = parsed.suggestions as Record<string, unknown>;
+        if (typeof overrides.notifyThreshold === "number") this.config.notifyThreshold = overrides.notifyThreshold;
+        if (typeof overrides.autoSaveThreshold === "number") this.config.autoSaveThreshold = overrides.autoSaveThreshold;
+        if (typeof overrides.autoSaveEnabled === "boolean") this.config.autoSaveEnabled = overrides.autoSaveEnabled;
+      }
+    } catch {
+      // no project config or unreadable — use defaults
+    }
   }
 
   // ── Feedback persistence ─────────────────────────────────────────────────
@@ -145,10 +161,12 @@ export class SuggestionEngine {
   private notify(suggestion: Suggestion): void {
     if (!this.server) return;
     try {
-      (this.server as any).server?.sendLoggingMessage?.({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const inner = (this.server as any).server;
+      inner?.sendLoggingMessage?.({
         level: "info",
         logger: "suggestion-engine",
-        data: { type: "memory_suggestion", ...suggestion },
+        data: { suggestionType: "memory_suggestion", ...suggestion },
       });
     } catch {
       // best-effort
@@ -159,7 +177,7 @@ export class SuggestionEngine {
 
   async observe(obs: Observation, projectRoot?: string): Promise<Suggestion[]> {
     if (projectRoot && !this.projectRoot) {
-      this.setProjectRoot(projectRoot);
+      await this.setProjectRoot(projectRoot);
     }
 
     if (!obs.timestamp) {

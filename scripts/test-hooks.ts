@@ -44,7 +44,7 @@ async function writeTranscript(): Promise<void> {
   await writeFile(TRANSCRIPT, raw);
 }
 
-async function readMemory(): Promise<any> {
+async function readMemory(): Promise<{ items: Array<{ tags?: string[]; title?: string }> }> {
   const raw = await readFile(MEMORY, "utf8");
   return JSON.parse(raw);
 }

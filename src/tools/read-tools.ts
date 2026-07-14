@@ -6,7 +6,9 @@ import {
   tokenize,
   normalizeTags,
   validateType,
+  isExpired,
 } from "../domain.js";
+import { CONFIG } from "../config.js";
 import { withStore } from "../storage.js";
 import { nowIso } from "../runtime.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -77,10 +79,11 @@ export function registerReadTools(server: McpServer): void {
           .boolean()
           .default(false)
           .describe("Include full content"),
+        staleOnly: z.boolean().default(false).describe("Only return items unused for staleDays (default 90)"),
         projectRoot: projectRootInput,
       },
     },
-    async ({ query, limit, types, tags, includeContent, projectRoot }) => {
+    async ({ query, limit, types, tags, includeContent, staleOnly, projectRoot }) => {
       const queryTokens = tokenize(query);
       const tagTokens = normalizeTags(tags);
 
@@ -88,39 +91,70 @@ export function registerReadTools(server: McpServer): void {
         ? new Set(types.map((t) => validateType(t)))
         : null;
 
-      const { store } = await withStore(
-        async () => false,
+      const now = nowIso();
+      const staleThreshold = Date.now() - ((CONFIG.staleDays ?? 90) * 86400000);
+      let matches: Array<{ item: typeof store.items[0]; score: number }> = [];
+      let store: Awaited<ReturnType<typeof withStore>>["store"];
+
+      const result = await withStore(
+        async (st) => {
+          store = st;
+          let items = st.items.filter((it) => !isExpired(it));
+
+          if (typeSet) {
+            items = items.filter((it) => typeSet.has(validateType(it.type)));
+          }
+
+          if (staleOnly) {
+            items = items.filter((it) => {
+              const lastUsed = Date.parse(it.lastUsedAt || it.updatedAt || it.createdAt || "");
+              return Number.isFinite(lastUsed) && lastUsed < staleThreshold && !it.pinned;
+            });
+          }
+
+          matches = items
+            .map((it) => ({
+              item: it,
+              score: scoreItem(it, queryTokens, tagTokens),
+            }))
+            .filter((x) => x.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, limit);
+
+          // Update lastUsedAt on matched items
+          const matchedIds = new Set(matches.map((m) => m.item.id));
+          let updated = false;
+          for (const item of st.items) {
+            if (matchedIds.has(item.id)) {
+              item.lastUsedAt = now;
+              updated = true;
+            }
+          }
+          return updated;
+        },
         storeOptions(projectRoot),
       );
+      store = result.store;
 
-      const matches = store.items
-        .filter((it) => (typeSet ? typeSet.has(validateType(it.type)) : true))
-        .map((it) => ({
-          item: it,
-          score: scoreItem(it, queryTokens, tagTokens),
-        }))
-        .filter((x) => x.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit)
-        .map(({ item, score }) => ({
-          id: item.id,
-          type: item.type,
-          title: item.title,
-          tags: item.tags || [],
-          pinned: Boolean(item.pinned),
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-          score,
-          snippet: safeSnippet(item.content),
-          ...(includeContent ? { content: String(item.content || "") } : {}),
-        }));
+      const output = matches.map(({ item, score }) => ({
+        id: item.id,
+        type: item.type,
+        title: item.title,
+        tags: item.tags || [],
+        pinned: Boolean(item.pinned),
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        score,
+        snippet: safeSnippet(item.content),
+        ...(includeContent ? { content: String(item.content || "") } : {}),
+      }));
 
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify(
-              { count: matches.length, results: matches },
+              { count: output.length, results: output },
               null,
               2,
             ),
@@ -160,28 +194,46 @@ export function registerReadTools(server: McpServer): void {
       const typeSet = types?.length
         ? new Set(types.map((t) => validateType(t)))
         : null;
+      const now = nowIso();
 
-      const { store } = await withStore(
-        async () => false,
+      let chosen: typeof store.items = [];
+      let store: Awaited<ReturnType<typeof withStore>>["store"];
+
+      const result = await withStore(
+        async (st) => {
+          store = st;
+          const active = st.items.filter((it) => !isExpired(it));
+          const candidates = typeSet
+            ? active.filter((it) => typeSet.has(validateType(it.type)))
+            : active;
+
+          const pinned = includePinned ? candidates.filter((x) => x.pinned) : [];
+          const rest = candidates
+            .filter((x) => !x.pinned)
+            .map((it) => ({ item: it, score: scoreItem(it, queryTokens, []) }))
+            .filter((x) => x.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .map((x) => x.item);
+
+          chosen = [...pinned, ...rest].slice(0, maxItems);
+
+          // Update lastUsedAt on bundled items
+          const chosenIds = new Set(chosen.map((it) => it.id));
+          let updated = false;
+          for (const item of st.items) {
+            if (chosenIds.has(item.id)) {
+              item.lastUsedAt = now;
+              updated = true;
+            }
+          }
+          return updated;
+        },
         storeOptions(projectRoot),
       );
-
-      const candidates = store.items.filter((it) =>
-        typeSet ? typeSet.has(validateType(it.type)) : true,
-      );
-
-      const pinned = includePinned ? candidates.filter((x) => x.pinned) : [];
-      const rest = candidates
-        .filter((x) => !x.pinned)
-        .map((it) => ({ item: it, score: scoreItem(it, queryTokens, []) }))
-        .filter((x) => x.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .map((x) => x.item);
-
-      const chosen = [...pinned, ...rest].slice(0, maxItems);
+      store = result.store;
 
       let out = "# Project Memory Bundle\n\n";
-      out += `Generated: ${nowIso()}\n`;
+      out += `Generated: ${now}\n`;
       out += `Items: ${chosen.length}\n\n`;
 
       for (const it of chosen) {

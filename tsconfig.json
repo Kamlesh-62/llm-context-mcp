@@ -5,13 +5,13 @@
     "moduleResolution": "NodeNext",
     "outDir": "dist",
     "rootDir": ".",
-    "strict": false,
-    "noImplicitAny": false,
+    "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "types": ["node"],
     "sourceMap": true
   },
-  "include": ["server.ts", "src/**/*.ts", "hooks/**/*.ts", "scripts/**/*.ts"]
+  "include": ["server.ts", "src/**/*.ts", "hooks/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["src/__tests__/**", "hooks/__tests__/**"]
 }

@@ -4,6 +4,7 @@ import {
   newId,
   normalizeTags,
   validateType,
+  findSimilarItems,
 } from "../domain.js";
 import { autoCompactStore } from "../maintenance.js";
 import { withStore } from "../storage.js";
@@ -30,25 +31,49 @@ export function registerWriteTools(server: McpServer): void {
         tags: z.array(z.string()).optional(),
         pinned: z.boolean().optional(),
         source: z.string().optional().describe("e.g. claude|codex|gemini"),
+        expiresAt: z.string().optional().describe("ISO 8601 expiry date. Item ignored after this date."),
+        supersede: z.boolean().optional().describe("If true, auto-archive the most similar existing item"),
         projectRoot: projectRootInput,
       },
     },
-    async ({ type, title, content, tags, pinned, source, projectRoot }) => {
+    async ({ type, title, content, tags, pinned, source, expiresAt, supersede, projectRoot }) => {
       const createdAt = nowIso();
       let itemId = "";
+      let warning = "";
 
       await withStore(async (st, ctx) => {
+        const trimmedTitle = String(title).trim();
+        const trimmedContent = String(content).trim();
+
+        // Contradiction detection
+        const similar = findSimilarItems(st.items, trimmedTitle, trimmedContent);
+        if (similar.length > 0) {
+          if (supersede) {
+            const top = similar[0];
+            top.item.archivedAt = createdAt;
+            top.item.archivedReason = "superseded";
+            st.items = st.items.filter((it) => it.id !== top.item.id);
+            warning = ` Superseded ${top.item.id} ("${top.item.title.slice(0, 60)}").`;
+          } else {
+            const hints = similar.slice(0, 3).map(
+              (s) => `  - ${s.item.id} (${(s.similarity * 100).toFixed(0)}%): "${s.item.title.slice(0, 60)}"`,
+            );
+            warning = `\nWarning: similar items found:\n${hints.join("\n")}\nUse supersede:true to auto-archive conflicts.`;
+          }
+        }
+
         const item: MemoryItem = {
           id: newId("mem"),
           type: validateType(type),
-          title: String(title).trim(),
-          content: String(content).trim(),
+          title: trimmedTitle,
+          content: trimmedContent,
           tags: normalizeTags(tags),
           pinned: Boolean(pinned),
           createdAt,
           updatedAt: createdAt,
           lastUsedAt: createdAt,
           source: source ? String(source).trim() : "direct",
+          ...(expiresAt ? { expiresAt } : {}),
         };
         st.items.push(item);
         itemId = item.id;
@@ -57,7 +82,7 @@ export function registerWriteTools(server: McpServer): void {
       }, storeOptions(projectRoot));
 
       return {
-        content: [{ type: "text", text: `Saved memory item ${itemId}` }],
+        content: [{ type: "text", text: `Saved memory item ${itemId}.${warning}` }],
       };
     },
   );

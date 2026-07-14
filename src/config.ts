@@ -39,6 +39,7 @@ export type Config = {
   lockRetryBackoff: number;
   maxLockRetryDelayMs: number;
   maxContentSnippetChars: number;
+  staleDays: number;
   autoCompact: AutoCompactConfig;
   suggestions: SuggestionConfig;
 };
@@ -52,6 +53,7 @@ export const CONFIG: Config = {
   lockRetryBackoff: 1.25,
   maxLockRetryDelayMs: 250,
   maxContentSnippetChars: LIMITS.maxSnippetChars,
+  staleDays: 90,
   suggestions: {
     notifyThreshold: 3,
     autoSaveThreshold: 5,

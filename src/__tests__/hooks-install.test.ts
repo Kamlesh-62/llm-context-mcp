@@ -4,7 +4,9 @@ import path from "node:path";
 import os from "node:os";
 import {
   installClaudeStopHook,
+  installClaudePostToolUseHook,
   claudeStopHookInstalled,
+  claudeHookInstalled,
 } from "../cli/hooks-install.js";
 
 let tmpDir: string;
@@ -96,5 +98,18 @@ describe("installClaudeStopHook", () => {
 
   it("claudeStopHookInstalled is false when nothing is configured", async () => {
     expect(await claudeStopHookInstalled(tmpDir)).toBe(false);
+  });
+
+  it("installs a PostToolUse hook alongside Stop without collision", async () => {
+    await installClaudeStopHook(tmpDir);
+    await installClaudePostToolUseHook(tmpDir);
+    const settings = await readSettings();
+
+    expect(settings.hooks.Stop).toHaveLength(1);
+    expect(settings.hooks.PostToolUse).toHaveLength(1);
+    expect(settings.hooks.Stop[0].hooks[0].command).toContain(" stop");
+    expect(settings.hooks.PostToolUse[0].hooks[0].command).toContain(" posttooluse");
+    expect(await claudeHookInstalled(tmpDir, "Stop")).toBe(true);
+    expect(await claudeHookInstalled(tmpDir, "PostToolUse")).toBe(true);
   });
 });

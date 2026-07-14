@@ -5,7 +5,11 @@ import type { CliSelection, ParsedArgs } from "./types.js";
 import { parseArgs, printHelp } from "./args.js";
 import { resolveRunner, snapshotRunner } from "./runners.js";
 import { configureClaude, configureGemini, configureCodex, checkExistingClaudeEntry } from "./config-writers.js";
-import { installClaudeStopHook, installCodexNotify } from "./hooks-install.js";
+import {
+  installClaudeStopHook,
+  installClaudePostToolUseHook,
+  installCodexNotify,
+} from "./hooks-install.js";
 import {
   errorMessage,
   resolvePath,
@@ -119,6 +123,25 @@ export async function runSetup(argv: string[] = []): Promise<number> {
             console.log(`  Stop hook written to ${p}`);
           }),
         );
+
+        // Real-time capture runs after every tool call — crash-safe but more
+        // frequent. Opt-in (defaults to No).
+        const wantRealtime =
+          !parsedArgs.acceptDefaults &&
+          (await askYesNo(
+            rl,
+            "Also capture in real-time (PostToolUse, more frequent)? (y/N): ",
+            false,
+            parsedArgs,
+          ));
+        if (wantRealtime) {
+          steps.push(
+            await executeStep("Claude real-time hook", async () => {
+              const p = await installClaudePostToolUseHook(projectRoot);
+              console.log(`  PostToolUse hook written to ${p}`);
+            }),
+          );
+        }
       }
       if (selection.codex) {
         steps.push(

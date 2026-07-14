@@ -33,15 +33,18 @@ function groupReferencesOurHook(group: unknown): boolean {
 }
 
 /**
- * Install (or refresh) the project's Claude Code `Stop` hook so memory is
- * auto-captured at the end of a session. Writes to `<projectRoot>/.claude/
- * settings.json`, merging into any existing hooks and never clobbering unrelated
- * entries. Idempotent: a re-run updates our hook's path in place rather than
- * appending a duplicate.
+ * Install (or refresh) a Claude Code hook for `event` that runs our auto-memory
+ * script in `mode`. Writes to `<projectRoot>/.claude/settings.json`, merging
+ * into any existing hooks and never clobbering unrelated entries. Idempotent:
+ * a re-run updates our hook's path in place rather than appending a duplicate.
  *
  * @returns the settings.json path written.
  */
-export async function installClaudeStopHook(projectRoot: string): Promise<string> {
+export async function installClaudeHook(
+  projectRoot: string,
+  event: "Stop" | "PostToolUse",
+  mode: "stop" | "posttooluse",
+): Promise<string> {
   const settingsPath = path.join(projectRoot, ".claude", "settings.json");
 
   let settings: Record<string, unknown> = {};
@@ -54,13 +57,13 @@ export async function installClaudeStopHook(projectRoot: string): Promise<string
   }
 
   const hooks = isRecord(settings.hooks) ? settings.hooks : {};
-  const stopGroups: unknown[] = Array.isArray(hooks.Stop) ? hooks.Stop : [];
+  const groups: unknown[] = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]) : [];
 
   const ourGroup: ClaudeHookGroup = {
     hooks: [
       {
         type: "command",
-        command: `node "${resolveHookScriptPath("auto-memory")}" stop`,
+        command: `node "${resolveHookScriptPath("auto-memory")}" ${mode}`,
         async: true,
         timeout: 15,
       },
@@ -68,14 +71,14 @@ export async function installClaudeStopHook(projectRoot: string): Promise<string
   };
 
   // Replace an existing group that already points at our hook; otherwise append.
-  const existingIndex = stopGroups.findIndex(groupReferencesOurHook);
+  const existingIndex = groups.findIndex(groupReferencesOurHook);
   if (existingIndex >= 0) {
-    stopGroups[existingIndex] = ourGroup;
+    groups[existingIndex] = ourGroup;
   } else {
-    stopGroups.push(ourGroup);
+    groups.push(ourGroup);
   }
 
-  hooks.Stop = stopGroups;
+  hooks[event] = groups;
   settings.hooks = hooks;
 
   await mkdir(path.dirname(settingsPath), { recursive: true });
@@ -83,17 +86,35 @@ export async function installClaudeStopHook(projectRoot: string): Promise<string
   return settingsPath;
 }
 
-/** Whether the project's Claude settings already register our Stop hook. */
-export async function claudeStopHookInstalled(projectRoot: string): Promise<boolean> {
+/** Install the session-end (Stop) auto-save hook. */
+export function installClaudeStopHook(projectRoot: string): Promise<string> {
+  return installClaudeHook(projectRoot, "Stop", "stop");
+}
+
+/** Install the real-time (PostToolUse) incremental-capture hook. */
+export function installClaudePostToolUseHook(projectRoot: string): Promise<string> {
+  return installClaudeHook(projectRoot, "PostToolUse", "posttooluse");
+}
+
+/** Whether the project's Claude settings already register our hook for `event`. */
+export async function claudeHookInstalled(
+  projectRoot: string,
+  event: "Stop" | "PostToolUse" = "Stop",
+): Promise<boolean> {
   const settingsPath = path.join(projectRoot, ".claude", "settings.json");
   try {
     const parsed = JSON.parse(await readFile(settingsPath, "utf8"));
     if (!isRecord(parsed) || !isRecord(parsed.hooks)) return false;
-    const stop = parsed.hooks.Stop;
-    return Array.isArray(stop) && stop.some(groupReferencesOurHook);
+    const groups = parsed.hooks[event];
+    return Array.isArray(groups) && groups.some(groupReferencesOurHook);
   } catch {
     return false;
   }
+}
+
+/** Back-compat alias — whether the Stop hook is installed. */
+export function claudeStopHookInstalled(projectRoot: string): Promise<boolean> {
+  return claudeHookInstalled(projectRoot, "Stop");
 }
 
 /**

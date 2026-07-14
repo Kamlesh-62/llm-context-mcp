@@ -11,6 +11,9 @@ import { fileURLToPath } from "node:url";
 
 import { LIMITS } from "../src/config.js";
 import type { MemoryType } from "../src/types.js";
+import { classifyCandidate } from "./dedup.js";
+
+export { jaccardSimilarity } from "./dedup.js";
 
 // Resolve the dist/ root so dynamic imports point to compiled src modules.
 const ROOT = resolve(fileURLToPath(import.meta.url), "../..");
@@ -29,14 +32,6 @@ export type ExtractedItem = {
 
 export function titleHash(title: string): string {
   return createHash("sha256").update(title).digest("hex").slice(0, 16);
-}
-
-export function jaccardSimilarity(a: string, b: string): number {
-  const setA = new Set(a.toLowerCase().split(/\s+/));
-  const setB = new Set(b.toLowerCase().split(/\s+/));
-  const intersection = [...setA].filter((t) => setB.has(t)).length;
-  const union = new Set([...setA, ...setB]).size;
-  return union === 0 ? 0 : intersection / union;
 }
 
 export async function readStdin(): Promise<string> {
@@ -89,7 +84,7 @@ export async function saveExtractedItems(params: {
   projectDir: string;
   candidates: ExtractedItem[];
   cursor: { itemHashes: string[] };
-}): Promise<{ newHashes: string[]; saved: number }> {
+}): Promise<{ newHashes: string[]; saved: number; updated: number }> {
   const { projectDir, candidates, cursor } = params;
 
   const existingHashes = new Set(cursor.itemHashes);
@@ -105,18 +100,43 @@ export async function saveExtractedItems(params: {
   }
 
   if (toSave.length === 0) {
-    return { newHashes, saved: 0 };
+    return { newHashes, saved: 0, updated: 0 };
   }
 
   let saved = 0;
+  let updated = 0;
   await withStore(
     (store: any) => {
       for (const item of toSave) {
-        // Jaccard dedup against existing store titles
-        const isDup = store.items.some(
-          (existing: any) => jaccardSimilarity(existing.title ?? "", item.title) > 0.8,
-        );
-        if (isDup) continue;
+        // Decide ADD / UPDATE / SKIP against what's already stored (including
+        // items added earlier in this same pass).
+        const existing = store.items.map((x: any) => ({
+          title: x.title ?? "",
+          type: x.type,
+        }));
+        const decision = classifyCandidate(existing, {
+          title: item.title,
+          type: item.type,
+        });
+
+        if (decision.action === "skip") continue;
+
+        if (decision.action === "update") {
+          const target = store.items[decision.index];
+          const newContent = (item.content ?? "").slice(0, LIMITS.maxContentChars);
+          // Keep the richer content; merge tags; refresh the timestamp.
+          if (newContent.length > (target.content?.length ?? 0)) {
+            target.content = newContent;
+          }
+          target.tags = normalizeTags([
+            ...(target.tags ?? []),
+            ...(item.tags ?? []),
+            "auto-hook",
+          ]);
+          target.updatedAt = nowIso();
+          updated++;
+          continue;
+        }
 
         store.items.push({
           id: newId("mem"),
@@ -131,10 +151,10 @@ export async function saveExtractedItems(params: {
         });
         saved++;
       }
-      return saved > 0; // signal withStore to write
+      return saved > 0 || updated > 0; // signal withStore to write
     },
     { projectRoot: projectDir },
   );
 
-  return { newHashes, saved };
+  return { newHashes, saved, updated };
 }

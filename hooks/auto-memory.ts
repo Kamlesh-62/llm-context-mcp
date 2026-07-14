@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 /**
- * Auto-memory hook (Stop / SessionEnd only):
- * Captures transcript takeaways into project memory using heuristic extractors.
+ * Auto-memory hook. Captures transcript takeaways into project memory using
+ * heuristic extractors.
+ *
+ * Modes (argv[2]):
+ *   stop        — session end: sweep the remaining transcript delta.
+ *   posttooluse — real-time: capture incrementally after each tool call, so a
+ *                 crashed/abandoned session still leaves its memory behind.
+ * Both share one cursor + hash dedup, so running both never double-saves.
  */
 
 import { join } from "node:path";
@@ -36,9 +42,12 @@ function projectDirFromPayload(payload: Record<string, unknown>): string {
   );
 }
 
-// ── stop handler ─────────────────────────────────────────────────────────────
+// ── capture handler ──────────────────────────────────────────────────────────
 
-async function handleStop(payload: Record<string, unknown>): Promise<void> {
+async function capture(
+  payload: Record<string, unknown>,
+  opts: { minAssistantMessages: number },
+): Promise<void> {
   const sessionId = (payload.session_id as string | undefined) ?? "unknown";
   const transcriptPath = payload.transcript_path as string | undefined;
   if (!transcriptPath) return;
@@ -52,8 +61,13 @@ async function handleStop(payload: Record<string, unknown>): Promise<void> {
   if (startIndex >= allLines.length) return;
 
   const delta = allLines.slice(startIndex);
-  if (countAssistantMessages(delta) < 2) {
-    await saveCursor(cursorPath, sessionId, allLines.length - 1, cursor.itemHashes);
+  if (countAssistantMessages(delta) < opts.minAssistantMessages) {
+    // Not enough new signal yet. Do NOT advance the cursor for real-time
+    // (posttooluse) passes, so the delta keeps accumulating until a later pass
+    // (or Stop) crosses the threshold; only Stop-scale passes advance on skip.
+    if (opts.minAssistantMessages >= 2) {
+      await saveCursor(cursorPath, sessionId, allLines.length - 1, cursor.itemHashes);
+    }
     return;
   }
 
@@ -70,11 +84,14 @@ async function handleStop(payload: Record<string, unknown>): Promise<void> {
 // ── entry ────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  const mode = (process.argv[2] ?? "stop").toLowerCase();
   const raw = await readStdin();
   const payload = parsePayload(raw);
   const isGemini = Boolean(process.env.GEMINI_PROJECT_DIR);
 
-  await handleStop(payload);
+  // Real-time passes fire often and need a lower bar; Stop is the final sweep.
+  const minAssistantMessages = mode === "posttooluse" ? 1 : 2;
+  await capture(payload, { minAssistantMessages });
 
   if (isGemini) {
     process.stdout.write("{}");

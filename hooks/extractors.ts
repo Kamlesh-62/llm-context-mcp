@@ -349,6 +349,105 @@ export function extractDecisionsFromText(lines: TranscriptLine[]): ExtractedItem
   return items;
 }
 
+// ── Extractor 5: TODOs / next steps from assistant text ──────────────────────
+
+export const RE_TODO = /\b(TODO|FIXME|next step|next steps|follow[- ]?up|still need to|remaining work|action item)\b/i;
+
+export function extractTodos(lines: TranscriptLine[]): ExtractedItem[] {
+  const items: ExtractedItem[] = [];
+  const seen = new Set<string>();
+
+  for (const line of lines) {
+    const msg = unwrap(line);
+    if (!msg || msg.role !== "assistant") continue;
+    const text = extractTextFromContent(msg.content);
+    if (!text) continue;
+
+    for (const sentence of splitSentences(text)) {
+      if (!RE_TODO.test(sentence)) continue;
+      const title = sentence.length > 100 ? sentence.slice(0, 100) + "…" : sentence;
+      const key = title.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({
+        type: "todo",
+        title,
+        content: sentence.slice(0, 500),
+        tags: ["todo", "next-steps"],
+      });
+    }
+  }
+
+  return items;
+}
+
+// ── Extractor 6: Config / env values from bash commands ──────────────────────
+
+export const RE_ENV_EXPORT = /\bexport\s+([A-Z][A-Z0-9_]{2,})=(\S+)/g;
+const RE_SECRETISH = /(SECRET|TOKEN|KEY|PASSWORD|PASS|CREDENTIAL|PRIVATE)/i;
+
+export function extractConfigValues(lines: TranscriptLine[]): ExtractedItem[] {
+  const items: ExtractedItem[] = [];
+  const seen = new Set<string>();
+
+  for (const call of bashToolCalls(lines)) {
+    const re = new RegExp(RE_ENV_EXPORT.source, "g");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(call.command)) !== null) {
+      const key = m[1];
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const value = m[2].replace(/^['"]|['"]$/g, "");
+      // Never persist secret-looking values — record only that it was set.
+      const content = RE_SECRETISH.test(key)
+        ? `${key} was set (value redacted)`
+        : `${key}=${value.slice(0, 120)}`;
+      items.push({
+        type: "fact",
+        title: `Config: ${key}`,
+        content,
+        tags: ["config", "environment"],
+      });
+    }
+  }
+
+  return items;
+}
+
+// ── Extractor 7: Chosen library / tool with a reason ─────────────────────────
+
+export const RE_CHOSE =
+  /\b(?:using|use|chose|adopted|picked|going with|switched to)\s+([A-Za-z@][\w@./-]{1,40})\s+(?:because|since|for|to)\b/i;
+
+export function extractChosenLibraries(lines: TranscriptLine[]): ExtractedItem[] {
+  const items: ExtractedItem[] = [];
+  const seen = new Set<string>();
+
+  for (const line of lines) {
+    const msg = unwrap(line);
+    if (!msg || msg.role !== "assistant") continue;
+    const text = extractTextFromContent(msg.content);
+    if (!text) continue;
+
+    for (const sentence of splitSentences(text)) {
+      const m = sentence.match(RE_CHOSE);
+      if (!m) continue;
+      const lib = m[1];
+      const key = lib.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({
+        type: "decision",
+        title: `Chose ${lib}`.slice(0, 100),
+        content: sentence.slice(0, 500),
+        tags: ["decision", "library"],
+      });
+    }
+  }
+
+  return items;
+}
+
 // ── Orchestrator ─────────────────────────────────────────────────────────────
 
 export function extractAll(lines: TranscriptLine[]): ExtractedItem[] {
@@ -357,5 +456,8 @@ export function extractAll(lines: TranscriptLine[]): ExtractedItem[] {
     ...extractErrorResolutions(lines),
     ...extractFileChanges(lines),
     ...extractDecisionsFromText(lines),
+    ...extractTodos(lines),
+    ...extractConfigValues(lines),
+    ...extractChosenLibraries(lines),
   ];
 }

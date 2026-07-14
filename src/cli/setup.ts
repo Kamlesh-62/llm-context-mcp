@@ -9,6 +9,7 @@ import {
   installClaudeStopHook,
   installClaudePostToolUseHook,
   installCodexNotify,
+  installCodexPostToolUseHook,
 } from "./hooks-install.js";
 import {
   errorMessage,
@@ -116,6 +117,17 @@ export async function runSetup(argv: string[] = []): Promise<number> {
       parsedArgs.acceptDefaults ||
       (await askYesNo(rl, "Install auto-save memory hooks? (Y/n): ", true, parsedArgs));
     if (wantHooks) {
+      // Real-time capture runs after every tool call — crash-safe but more
+      // frequent. Opt-in (defaults to No); applies to whichever CLIs support it.
+      const wantRealtime =
+        !parsedArgs.acceptDefaults &&
+        (await askYesNo(
+          rl,
+          "Also capture in real-time (PostToolUse, more frequent)? (y/N): ",
+          false,
+          parsedArgs,
+        ));
+
       if (selection.claude) {
         steps.push(
           await executeStep("Claude auto-save hook", async () => {
@@ -123,17 +135,6 @@ export async function runSetup(argv: string[] = []): Promise<number> {
             console.log(`  Stop hook written to ${p}`);
           }),
         );
-
-        // Real-time capture runs after every tool call — crash-safe but more
-        // frequent. Opt-in (defaults to No).
-        const wantRealtime =
-          !parsedArgs.acceptDefaults &&
-          (await askYesNo(
-            rl,
-            "Also capture in real-time (PostToolUse, more frequent)? (y/N): ",
-            false,
-            parsedArgs,
-          ));
         if (wantRealtime) {
           steps.push(
             await executeStep("Claude real-time hook", async () => {
@@ -151,6 +152,17 @@ export async function runSetup(argv: string[] = []): Promise<number> {
             else console.log(`  ${r.configPath} already has a notify entry — leaving it. Recommended: ${r.recommended}`);
           }),
         );
+        if (wantRealtime) {
+          steps.push(
+            await executeStep("Codex real-time hook", async () => {
+              const r = await installCodexPostToolUseHook(projectRoot);
+              console.log(`  PostToolUse hook written to ${r.hooksPath}`);
+              if (r.featureFlag === "added") console.log(`  enabled [features] hooks = true in ${r.configPath}`);
+              else if (r.featureFlag === "manual")
+                console.log(`  ACTION: add \`[features]\\nhooks = true\` to ${r.configPath} (existing [features] table left untouched)`);
+            }),
+          );
+        }
       }
     }
 

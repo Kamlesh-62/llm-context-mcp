@@ -7,6 +7,8 @@ import {
   installClaudePostToolUseHook,
   claudeStopHookInstalled,
   claudeHookInstalled,
+  installCodexPostToolUseHook,
+  codexPostToolUseHookInstalled,
 } from "../cli/hooks-install.js";
 
 let tmpDir: string;
@@ -111,5 +113,60 @@ describe("installClaudeStopHook", () => {
     expect(settings.hooks.PostToolUse[0].hooks[0].command).toContain(" posttooluse");
     expect(await claudeHookInstalled(tmpDir, "Stop")).toBe(true);
     expect(await claudeHookInstalled(tmpDir, "PostToolUse")).toBe(true);
+  });
+});
+
+describe("installCodexPostToolUseHook", () => {
+  let tmpDir: string;
+  let codexHome: string;
+  let savedCodexHome: string | undefined;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mem-codex-"));
+    codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-"));
+    savedCodexHome = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = codexHome; // keep the real ~/.codex untouched
+  });
+
+  afterEach(async () => {
+    if (savedCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = savedCodexHome;
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    await fs.rm(codexHome, { recursive: true, force: true });
+  });
+
+  it("writes .codex/hooks.json with a posttooluse command and enables the flag", async () => {
+    const r = await installCodexPostToolUseHook(tmpDir);
+    expect(r.featureFlag).toBe("added");
+
+    const doc = JSON.parse(await fs.readFile(path.join(tmpDir, ".codex", "hooks.json"), "utf8"));
+    expect(doc.PostToolUse[0].hooks[0].command).toContain("auto-memory.js");
+    expect(doc.PostToolUse[0].hooks[0].command).toContain("posttooluse");
+
+    const toml = await fs.readFile(path.join(codexHome, "config.toml"), "utf8");
+    expect(toml).toMatch(/\[features\]/);
+    expect(toml).toMatch(/hooks\s*=\s*true/);
+
+    expect(await codexPostToolUseHookInstalled(tmpDir)).toBe(true);
+  });
+
+  it("is idempotent and reports the flag already present", async () => {
+    await installCodexPostToolUseHook(tmpDir);
+    const r2 = await installCodexPostToolUseHook(tmpDir);
+    expect(r2.featureFlag).toBe("present");
+    const doc = JSON.parse(await fs.readFile(path.join(tmpDir, ".codex", "hooks.json"), "utf8"));
+    expect(doc.PostToolUse).toHaveLength(1); // no duplicate
+  });
+
+  it("does not edit an existing [features] table (reports manual)", async () => {
+    await fs.writeFile(
+      path.join(codexHome, "config.toml"),
+      '[features]\nweb_search = true\n',
+      "utf8",
+    );
+    const r = await installCodexPostToolUseHook(tmpDir);
+    expect(r.featureFlag).toBe("manual");
+    const toml = await fs.readFile(path.join(codexHome, "config.toml"), "utf8");
+    expect(toml).not.toMatch(/hooks\s*=\s*true/); // left untouched
   });
 });

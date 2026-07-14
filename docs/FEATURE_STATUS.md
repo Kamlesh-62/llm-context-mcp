@@ -24,6 +24,7 @@
 - **Real-time capture** – opt-in `PostToolUse` mode on `auto-memory` captures incrementally during a session (crash-safe), sharing one cursor + hash dedup with the `Stop` sweep.
 - **Richer extractors** – added TODO/next-step, config/env-value (with secret redaction), and chosen-library-with-reason extractors.
 - **Smart dedup (ADD/UPDATE/SKIP)** – auto-captured items now update a near-duplicate in place (refreshing content, merging tags) instead of only add-or-skip, keeping memory from filling with restatements.
+- **Codex transcript support** – `hooks/codex-transcript.ts` normalizes Codex rollout files (Responses API shape) into the extractor format, so auto-capture actually works for Codex (previously extracted nothing). Includes a native `PostToolUse` hook installer (`.codex/hooks.json` + `[features] hooks = true`) for real-time Codex capture, plus error-heuristic hardening (exit-code-authoritative, benign search exit-1 ignored).
 
 ---
 

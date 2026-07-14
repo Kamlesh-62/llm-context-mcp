@@ -4,6 +4,7 @@
  * candidate memory items: { type, title, content, tags }.
  */
 
+import { normalizeCodexTranscript } from "./codex-transcript.js";
 import type { MemoryType } from "../src/types.js";
 
 export type TranscriptLine = Record<string, unknown>;
@@ -215,6 +216,41 @@ export function extractFromBashTools(lines: TranscriptLine[]): ExtractedItem[] {
 
 // ── Extractor 2: Error resolutions ───────────────────────────────────────────
 
+// Codex prefixes exec output with metadata lines; skip them when summarizing.
+const RE_CODEX_META = /^(Chunk ID:|Wall time:|Process exited with code|Original token count:|Output:)/i;
+// Commands where exit code 1 means "no match / differences", not a failure.
+const RE_BENIGN_EXIT1 = /^\s*(rg|grep|egrep|fgrep|ag|find|diff|git\s+diff|test|\[)\b/;
+
+function firstMeaningfulLine(output: string): string {
+  for (const line of output.split("\n")) {
+    const t = line.trim();
+    if (t && !RE_CODEX_META.test(t)) return t.slice(0, 150);
+  }
+  return output.slice(0, 150).split("\n")[0];
+}
+
+/**
+ * Decide whether a command's output represents a real failure.
+ *
+ * When the output carries an explicit exit code (Codex always prints
+ * "Process exited with code N"), that is authoritative: fail on ≥ 2, or on 1
+ * for non-search commands — and IGNORE error keywords, since search results
+ * routinely contain the word "error" without the command having failed.
+ *
+ * Only when there is no exit code (some Claude bash results) do we fall back to
+ * error-keyword matching.
+ */
+function looksLikeError(command: string, output: string): boolean {
+  const m = output.match(/exit(?:ed with)? code (\d+)/i);
+  if (m) {
+    const code = parseInt(m[1], 10);
+    if (code >= 2) return true;
+    if (code === 1) return !RE_BENIGN_EXIT1.test(command);
+    return false; // exit 0 → success, regardless of output text
+  }
+  return /error:|ERR!|FAIL|fatal:|Traceback/i.test(output);
+}
+
 export function extractErrorResolutions(lines: TranscriptLine[]): ExtractedItem[] {
   const items: ExtractedItem[] = [];
   const calls = bashToolCalls(lines);
@@ -229,12 +265,11 @@ export function extractErrorResolutions(lines: TranscriptLine[]): ExtractedItem[
     const output = resultForId(resMap, call.id);
     const outStr = typeof output === "string" ? output : JSON.stringify(output ?? "");
 
-    // Heuristic: non-zero exit or common error strings
-    const isError = /exit code [1-9]|error:|ERR!|FAIL|fatal:/i.test(outStr);
+    const isError = looksLikeError(call.command, outStr);
     const isSuccess = !isError && outStr.length > 0;
 
     if (isError) {
-      const summary = outStr.slice(0, 150).split("\n")[0];
+      const summary = firstMeaningfulLine(outStr);
       errors.push({ command: call.command, summary });
     } else if (isSuccess && errors.length > 0) {
       // Check if this success relates to a prior error (same base command)
@@ -450,7 +485,10 @@ export function extractChosenLibraries(lines: TranscriptLine[]): ExtractedItem[]
 
 // ── Orchestrator ─────────────────────────────────────────────────────────────
 
-export function extractAll(lines: TranscriptLine[]): ExtractedItem[] {
+export function extractAll(rawLines: TranscriptLine[]): ExtractedItem[] {
+  // Convert Codex rollout lines to the Claude shape the extractors expect;
+  // Claude lines pass through unchanged.
+  const lines = normalizeCodexTranscript(rawLines);
   return [
     ...extractFromBashTools(lines),
     ...extractErrorResolutions(lines),

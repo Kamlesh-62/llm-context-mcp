@@ -16,6 +16,12 @@ export function resolveHookScriptPath(scriptName: string): string {
   return path.resolve(here, "..", "..", "hooks", `${scriptName}.js`);
 }
 
+/** Codex's config directory, honoring the CODEX_HOME env var like Codex does. */
+function codexHome(): string {
+  const env = process.env.CODEX_HOME?.trim();
+  return env ? env : path.join(homedir(), ".codex");
+}
+
 const HOOK_MARKER = "auto-memory.js";
 
 type ClaudeHookCommand = { type: "command"; command: string; async?: boolean; timeout?: number };
@@ -118,6 +124,81 @@ export function claudeStopHookInstalled(projectRoot: string): Promise<boolean> {
 }
 
 /**
+ * Install (or refresh) the Codex real-time PostToolUse hook so memory is
+ * captured incrementally during a session. Writes `<projectRoot>/.codex/
+ * hooks.json` (JSON merge, idempotent) and ensures `[features] hooks = true`
+ * in `~/.codex/config.toml`.
+ *
+ * The feature flag is only appended when no `[features]` table exists — if one
+ * is already present, we don't risk editing it and report `manual` so the
+ * caller can tell the user to add the flag.
+ */
+export async function installCodexPostToolUseHook(projectRoot: string): Promise<{
+  hooksPath: string;
+  configPath: string;
+  featureFlag: "added" | "present" | "manual";
+}> {
+  const hooksPath = path.join(projectRoot, ".codex", "hooks.json");
+  const command = `node "${resolveHookScriptPath("auto-memory")}" posttooluse`;
+
+  let hooksDoc: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(await readFile(hooksPath, "utf8"));
+    if (isRecord(parsed)) hooksDoc = parsed;
+  } catch {
+    // missing or unparseable — start fresh
+  }
+
+  const groups: unknown[] = Array.isArray(hooksDoc.PostToolUse)
+    ? (hooksDoc.PostToolUse as unknown[])
+    : [];
+  const ourGroup = { hooks: [{ type: "command", command, timeout: 15 }] };
+  const existingIndex = groups.findIndex(groupReferencesOurHook);
+  if (existingIndex >= 0) groups[existingIndex] = ourGroup;
+  else groups.push(ourGroup);
+  hooksDoc.PostToolUse = groups;
+
+  await mkdir(path.dirname(hooksPath), { recursive: true });
+  await writeFile(hooksPath, `${JSON.stringify(hooksDoc, null, 2)}\n`);
+
+  const featureFlag = await ensureCodexFeaturesFlag();
+  return { hooksPath, configPath: path.join(codexHome(), "config.toml"), featureFlag };
+}
+
+/** Ensure `[features] hooks = true` in Codex's config.toml (conservatively). */
+async function ensureCodexFeaturesFlag(): Promise<"added" | "present" | "manual"> {
+  const configPath = path.join(codexHome(), "config.toml");
+  let contents = "";
+  try {
+    contents = await readFile(configPath, "utf8");
+  } catch {
+    // no config yet
+  }
+
+  if (/^\s*hooks\s*=\s*true/m.test(contents)) return "present";
+  if (/^\s*\[features\]/m.test(contents)) return "manual"; // don't edit an existing table
+
+  const prefix = contents.length > 0 && !contents.endsWith("\n") ? "\n" : "";
+  const block = `${prefix}\n[features]\nhooks = true\n`;
+  await mkdir(path.dirname(configPath), { recursive: true });
+  await writeFile(configPath, contents + block);
+  return "added";
+}
+
+/** Whether the project's Codex hooks.json registers our PostToolUse hook. */
+export async function codexPostToolUseHookInstalled(projectRoot: string): Promise<boolean> {
+  const hooksPath = path.join(projectRoot, ".codex", "hooks.json");
+  try {
+    const parsed = JSON.parse(await readFile(hooksPath, "utf8"));
+    if (!isRecord(parsed)) return false;
+    const groups = parsed.PostToolUse;
+    return Array.isArray(groups) && groups.some(groupReferencesOurHook);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Ensure Codex's `notify` program points at our capture bridge in
  * `~/.codex/config.toml`. Appends the key only when absent — an existing
  * `notify` is left alone (we won't silently rewrite a user's config) and the
@@ -130,7 +211,7 @@ export async function installCodexNotify(): Promise<{
   configPath: string;
   recommended: string;
 }> {
-  const configPath = path.join(homedir(), ".codex", "config.toml");
+  const configPath = path.join(codexHome(), "config.toml");
   const notifyScript = resolveHookScriptPath("codex-notify");
   const recommended = `notify = ["node", ${JSON.stringify(notifyScript)}]`;
 

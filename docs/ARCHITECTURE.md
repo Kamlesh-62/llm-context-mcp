@@ -71,6 +71,14 @@ Memory is captured automatically from session transcripts:
   facts via heuristics (`extractors.ts`), and persist through `withStore` (so they
   benefit from the backend abstraction unchanged).
 - `cursor.ts` — tracks processed transcript lines to avoid reprocessing.
-- `codex-notify.ts` — adapts Codex's notification into the same entry point.
+- `codex-transcript.ts` — normalizes Codex rollout files (OpenAI Responses API
+  shape: `response_item` / `function_call` / `function_call_output`) into the
+  Claude-shaped lines the extractors expect, so one set of extractors serves both
+  CLIs. Called at the top of `extractAll`; Claude lines pass through untouched.
+- `codex-notify.ts` — legacy fallback that adapts Codex's `notify` into the same
+  entry point (for Codex versions predating native hooks).
 
-Items captured this way are tagged `source: "auto-hook"`.
+Both `Stop` (end of session) and `PostToolUse` (real-time, opt-in) modes are
+supported for Claude and Codex; real-time uses a lower capture threshold and
+shares the same cursor + hash dedup as the Stop sweep. Items captured this way
+are tagged `source: "auto-hook"`.

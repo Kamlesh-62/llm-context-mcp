@@ -226,9 +226,31 @@ export async function installCodexNotify(): Promise<{
     return { status: "exists", configPath, recommended };
   }
 
-  const prefix = contents.length > 0 && !contents.endsWith("\n") ? "\n" : "";
-  const block = `${prefix}\n# Added by project-memory-mcp: auto-capture memory from Codex sessions\n${recommended}\n`;
+  const comment =
+    "# Added by project-memory-mcp: auto-capture memory from Codex sessions";
+  const next = insertTopLevelKey(contents, `${comment}\n${recommended}`);
   await mkdir(path.dirname(configPath), { recursive: true });
-  await writeFile(configPath, contents + block);
+  await writeFile(configPath, next);
   return { status: "added", configPath, recommended };
+}
+
+/**
+ * Insert a top-level TOML key `block` into `contents`. In TOML a bare key must
+ * appear before the first `[table]` header, otherwise it is parsed as a member
+ * of that table. Appending at end-of-file is only safe when no table exists —
+ * if the file ends with e.g. `[features]`, an appended `notify = [...]` would be
+ * read as `features.notify` and break the config. So we splice the block in
+ * just before the first table header, and only append when there is none.
+ */
+function insertTopLevelKey(contents: string, block: string): string {
+  const lines = contents.split("\n");
+  const firstTable = lines.findIndex((l) => /^\s*\[/.test(l));
+
+  if (firstTable === -1) {
+    const prefix = contents.length > 0 && !contents.endsWith("\n") ? "\n" : "";
+    return `${contents}${prefix}\n${block}\n`;
+  }
+
+  lines.splice(firstTable, 0, block, "");
+  return lines.join("\n");
 }

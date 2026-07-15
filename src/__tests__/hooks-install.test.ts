@@ -9,6 +9,7 @@ import {
   claudeHookInstalled,
   installCodexPostToolUseHook,
   codexPostToolUseHookInstalled,
+  installCodexNotify,
 } from "../cli/hooks-install.js";
 
 let tmpDir: string;
@@ -168,5 +169,61 @@ describe("installCodexPostToolUseHook", () => {
     expect(r.featureFlag).toBe("manual");
     const toml = await fs.readFile(path.join(codexHome, "config.toml"), "utf8");
     expect(toml).not.toMatch(/hooks\s*=\s*true/); // left untouched
+  });
+});
+
+describe("installCodexNotify", () => {
+  let codexHome: string;
+  let savedCodexHome: string | undefined;
+
+  beforeEach(async () => {
+    codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-notify-"));
+    savedCodexHome = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = codexHome;
+  });
+
+  afterEach(async () => {
+    if (savedCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = savedCodexHome;
+    await fs.rm(codexHome, { recursive: true, force: true });
+  });
+
+  const configPath = () => path.join(codexHome, "config.toml");
+
+  it("inserts notify BEFORE a trailing table so it stays top-level (regression)", async () => {
+    // A config whose last section is a table — the exact shape that used to
+    // swallow `notify` into [features] and break Codex config parsing.
+    await fs.writeFile(
+      configPath(),
+      'model = "gpt-5.5"\n\n[features]\nmemories = true\n',
+      "utf8",
+    );
+
+    const r = await installCodexNotify();
+    expect(r.status).toBe("added");
+
+    const toml = await fs.readFile(configPath(), "utf8");
+    const notifyLine = toml.split("\n").findIndex((l) => l.startsWith("notify ="));
+    const featuresLine = toml.split("\n").findIndex((l) => l.trim() === "[features]");
+    expect(notifyLine).toBeGreaterThanOrEqual(0);
+    expect(featuresLine).toBeGreaterThanOrEqual(0);
+    // notify must come BEFORE [features], never inside it
+    expect(notifyLine).toBeLessThan(featuresLine);
+  });
+
+  it("appends notify when the file has no tables", async () => {
+    await fs.writeFile(configPath(), 'model = "gpt-5.5"\n', "utf8");
+    const r = await installCodexNotify();
+    expect(r.status).toBe("added");
+    const toml = await fs.readFile(configPath(), "utf8");
+    expect(toml).toMatch(/^notify = \["node",/m);
+  });
+
+  it("leaves an existing notify entry untouched", async () => {
+    await fs.writeFile(configPath(), 'notify = ["something"]\n\n[features]\na = true\n', "utf8");
+    const r = await installCodexNotify();
+    expect(r.status).toBe("exists");
+    const toml = await fs.readFile(configPath(), "utf8");
+    expect(toml).toContain('notify = ["something"]');
   });
 });

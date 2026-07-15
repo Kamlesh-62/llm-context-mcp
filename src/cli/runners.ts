@@ -7,12 +7,12 @@ const SERVER_ENTRY_PATH = fileURLToPath(new URL("../../server.js", import.meta.u
 
 export const BUILTIN_RUNNERS = {
   npx: {
-    label: "Use npx project-memory-mcp (installs on demand)",
+    label: "Use npx context-bridge-mcp (installs on demand)",
     command: "npx",
-    args: ["project-memory-mcp"],
+    args: ["-y", "context-bridge-mcp"],
   },
   global: {
-    label: "Use globally installed project-memory-mcp binary",
+    label: "Use globally installed project-memory-mcp binary (from context-bridge-mcp)",
     command: "project-memory-mcp",
     args: [],
   },

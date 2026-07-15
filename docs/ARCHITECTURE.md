@@ -1,6 +1,6 @@
 # Architecture
 
-A short map of how project-memory-mcp is put together. For backend specifics and
+A short map of how context-bridge-mcp is put together. For backend specifics and
 migration, see [STORAGE_BACKENDS.md](./STORAGE_BACKENDS.md).
 
 ## Overview

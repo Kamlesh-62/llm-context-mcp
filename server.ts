@@ -77,14 +77,14 @@ async function run(): Promise<void> {
 function printUsage(): void {
   console.log(`
 Usage:
-  project-memory-mcp               Start the MCP server (default)
-  project-memory-mcp serve         Explicitly start the MCP server
-  project-memory-mcp setup [...]   Run the interactive CLI configuration wizard
-  project-memory-mcp switch [...]  Re-apply saved config to CLIs (no prompts)
-  project-memory-mcp doctor [...]  Run health checks on project setup
-  project-memory-mcp migrate --to <json|sqlite> [--dry-run] [--force] [--set-default]
+  context-bridge-mcp               Start the MCP server (default)
+  context-bridge-mcp serve         Explicitly start the MCP server
+  context-bridge-mcp setup [...]   Run the interactive CLI configuration wizard
+  context-bridge-mcp switch [...]  Re-apply saved config to CLIs (no prompts)
+  context-bridge-mcp doctor [...]  Run health checks on project setup
+  context-bridge-mcp migrate --to <json|sqlite> [--dry-run] [--force] [--set-default]
                                    Migrate memory between storage backends
-  project-memory-mcp help          Show this message
+  context-bridge-mcp help          Show this message
 `.trim());
 }
 

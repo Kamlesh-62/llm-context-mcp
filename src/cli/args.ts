@@ -100,7 +100,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 export function printHelp(): void {
   console.log(
     [
-      "Usage: project-memory-mcp setup [options]",
+      "Usage: context-bridge-mcp setup [options]",
       "",
       "Options:",
       "  --project <path>     Project directory to bind the MCP server to.",
@@ -113,9 +113,9 @@ export function printHelp(): void {
       "  -h, --help           Show this help text.",
       "",
       "Examples:",
-      "  project-memory-mcp setup",
-      "  project-memory-mcp setup --cli claude,gemini --project ~/code/api",
-      '  project-memory-mcp setup --runner custom --command "node" --args "[\\"/path/dist/server.js\\"]"',
+      "  context-bridge-mcp setup",
+      "  context-bridge-mcp setup --cli claude,gemini --project ~/code/api",
+      '  context-bridge-mcp setup --runner custom --command "node" --args "[\\"/path/dist/server.js\\"]"',
     ].join("\n"),
   );
 }

@@ -12,8 +12,8 @@ export const BUILTIN_RUNNERS = {
     args: ["-y", "context-bridge-mcp"],
   },
   global: {
-    label: "Use globally installed project-memory-mcp binary (from context-bridge-mcp)",
-    command: "project-memory-mcp",
+    label: "Use globally installed context-bridge-mcp binary",
+    command: "context-bridge-mcp",
     args: [],
   },
   node: {

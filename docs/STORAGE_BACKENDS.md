@@ -49,7 +49,7 @@ The SQLite backend needs a driver, resolved at runtime:
 
 If SQLite is selected but no driver is available, the server throws an actionable
 error rather than falling back to JSON — falling back would split your memory
-across two stores. Run `project-memory-mcp doctor` to check driver availability.
+across two stores. Run `context-bridge-mcp doctor` to check driver availability.
 
 ## Migrating
 
@@ -58,19 +58,19 @@ the source is never modified, so it is always reversible.
 
 ```bash
 # JSON -> SQLite
-project-memory-mcp migrate --to sqlite
+context-bridge-mcp migrate --to sqlite
 
 # SQLite -> JSON
-project-memory-mcp migrate --to json --from sqlite
+context-bridge-mcp migrate --to json --from sqlite
 
 # Preview without writing
-project-memory-mcp migrate --to sqlite --dry-run
+context-bridge-mcp migrate --to sqlite --dry-run
 
 # Overwrite a non-empty target
-project-memory-mcp migrate --to sqlite --force
+context-bridge-mcp migrate --to sqlite --force
 
 # Also set it as the default afterward
-project-memory-mcp migrate --to sqlite --set-default
+context-bridge-mcp migrate --to sqlite --set-default
 ```
 
 Flags:

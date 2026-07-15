@@ -19,8 +19,8 @@ Already have it installed? Update, then re-sync each project:
 ```bash
 npm update -g context-bridge-mcp        # get the new version
 cd ~/my-project
-project-memory-mcp setup                 # re-writes hooks at the new package path
-project-memory-mcp doctor                # verify config, store, hooks, SQLite driver
+context-bridge-mcp setup                 # re-writes hooks at the new package path
+context-bridge-mcp doctor                # verify config, store, hooks, SQLite driver
 ```
 
 Re-running `setup` is what installs newly added features (e.g. the auto-save hooks and real-time capture) — the wizard is idempotent and merges into existing config without clobbering it. Your memory data is untouched by an upgrade. To also change where memory is stored, see [Storage](#storage).
@@ -31,7 +31,7 @@ Run the wizard from any project you want to enable:
 
 ```bash
 cd ~/my-project
-project-memory-mcp setup
+context-bridge-mcp setup
 ```
 
 The wizard will:
@@ -51,24 +51,24 @@ You should see `projectRoot` pointing to your project and `memoryFilePath` to `.
 ### Re-apply config without prompts
 
 ```bash
-project-memory-mcp switch                  # all CLIs
-project-memory-mcp switch --cli claude     # one CLI only
+context-bridge-mcp switch                  # all CLIs
+context-bridge-mcp switch --cli claude     # one CLI only
 ```
 
 ### Scripted setup (CI / automation)
 
 ```bash
-project-memory-mcp setup --yes --server-id my-server --runner npx --cli claude,gemini
+context-bridge-mcp setup --yes --server-id my-server --runner npx --cli claude,gemini
 ```
 
-Run `project-memory-mcp setup --help` for all flags.
+Run `context-bridge-mcp setup --help` for all flags.
 
 ### Other commands
 
 ```bash
-project-memory-mcp doctor    # health-check setup: MCP config, store readable, hooks wired + run
-project-memory-mcp migrate --to sqlite   # move memory between JSON and SQLite (see Storage)
-project-memory-mcp help      # list all commands
+context-bridge-mcp doctor    # health-check setup: MCP config, store readable, hooks wired + run
+context-bridge-mcp migrate --to sqlite   # move memory between JSON and SQLite (see Storage)
+context-bridge-mcp help      # list all commands
 ```
 
 ## Usage
@@ -159,7 +159,7 @@ Per CLI:
 
 Items are deduplicated across sessions via title hashing and Jaccard similarity, which also decides **update-in-place** vs skip vs add so memory doesn't fill with restatements. Auto-captured items are tagged `source: "auto-hook"`.
 
-Verify hooks are wired and have run: `project-memory-mcp doctor`. Test the extractors: `npm run test:hooks`.
+Verify hooks are wired and have run: `context-bridge-mcp doctor`. Test the extractors: `npm run test:hooks`.
 
 ## Team attribution
 
@@ -173,7 +173,7 @@ Resolution order (first hit wins):
 2. `~/.project-memory-mcp/identity.json` — what `setup` writes
 3. git `user.name` — a name-only fallback so attribution works even before you run setup
 
-Change it any time by re-running `project-memory-mcp setup`, or check the resolved value with `project-memory-mcp doctor`. If no name resolves, items are saved without an `author` — nothing breaks.
+Change it any time by re-running `context-bridge-mcp setup`, or check the resolved value with `context-bridge-mcp doctor`. If no name resolves, items are saved without an `author` — nothing breaks.
 
 ## Storage
 
@@ -182,7 +182,7 @@ Memory lives in one local file per project. Two backends:
 - **JSON** (`.ai/memory.json`) — the zero-config default. Human-readable and git-diffable.
 - **SQLite** (`.ai/memory.sqlite`) — opt-in for larger stores / faster search. Binary, not git-diffable. Uses built-in `node:sqlite` (Node ≥22.5) or `better-sqlite3` as a fallback.
 
-Select per project via `.ai/memory-mcp.json` (`{"storage":{"backend":"sqlite"}}`) or the `MEMORY_STORAGE_BACKEND` env var. Move between them with `project-memory-mcp migrate --to <json|sqlite>` — the source is left intact, so it's reversible.
+Select per project via `.ai/memory-mcp.json` (`{"storage":{"backend":"sqlite"}}`) or the `MEMORY_STORAGE_BACKEND` env var. Move between them with `context-bridge-mcp migrate --to <json|sqlite>` — the source is left intact, so it's reversible.
 
 See [`docs/STORAGE_BACKENDS.md`](docs/STORAGE_BACKENDS.md) for the full comparison and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the design.
 
@@ -202,7 +202,7 @@ See [`docs/STORAGE_BACKENDS.md`](docs/STORAGE_BACKENDS.md) for the full comparis
 
 ## Troubleshooting
 
-Run `project-memory-mcp doctor` first — it checks MCP config, store readability, SQLite driver, and whether hooks are wired and have run.
+Run `context-bridge-mcp doctor` first — it checks MCP config, store readability, SQLite driver, and whether hooks are wired and have run.
 
 | Problem | Fix |
 |---|---|

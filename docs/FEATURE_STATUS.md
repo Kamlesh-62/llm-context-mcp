@@ -1,6 +1,6 @@
 # Feature Status & Roadmap
 
-> Living document tracking completed work, planned features, and design specs for `project-memory-mcp`.
+> Living document tracking completed work, planned features, and design specs for `context-bridge-mcp`.
 
 ---
 
@@ -10,16 +10,16 @@
 - **Per-project defaults cache** – `.ai/memory-mcp.json` remembers the last `{serverId, runner}` so rerunning the wizard in CI or local shells uses sane defaults automatically.
 - **Runner recall** – saved runner definitions (including custom commands/args) are restored on the next setup run, cutting down on re-entry when switching between `npx`, global, and local builds.
 - **Runner profiles** – `--runner-profile` alias on `setup` accepts the same values as `--runner` (`npx`, `global`, `node`, `custom`), making the flag name more discoverable.
-- **`switch` command** – `project-memory-mcp switch [--project <path>] [--cli <list>]` reapplies the saved `.ai/memory-mcp.json` config to selected CLIs in one step, no interactive prompts required.
+- **`switch` command** – `context-bridge-mcp switch [--project <path>] [--cli <list>]` reapplies the saved `.ai/memory-mcp.json` config to selected CLIs in one step, no interactive prompts required.
 - **Duplicate server ID detection** – interactive `setup` checks whether the chosen server ID already exists in `~/.claude.json` and prompts the user to either update the existing entry or pick a different ID.
 - **Claude config override** – `PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH` / `CLAUDE_CONFIG_PATH` lets us wire Claude inside sandboxes or CI without writing to `~/.claude.json`.
-- **Version flag** – `project-memory-mcp --version` prints the package version for quick build verification.
+- **Version flag** – `context-bridge-mcp --version` prints the package version for quick build verification.
 - **`memory_update` & `memory_delete`** – modify or permanently remove memory items by ID through MCP tools, eliminating the need for manual JSON editing.
 - **Suggestion Engine** – live, mid-session pattern detection via `memory_observe` → scoring → `memory_suggest` → `memory_suggestion_feedback`. 5 rule types (version-check, dependency-change, deploy-release, error-fix, config-change), scoring with recency boost and feedback multipliers, persistent feedback in `.ai/suggestion-feedback.json`.
 - **MCP Prompts** – 11 slash-command prompts registered via `server.prompt()` for all tools including suggestion engine.
 - **Pluggable storage backends** – `withStore()` sits behind a `StorageBackend` seam (`src/storage/`). JSON stays the zero-config default; SQLite is opt-in via `.ai/memory-mcp.json` `storage.backend` (driver: built-in `node:sqlite` ≥22.5, else optional `better-sqlite3`). See [ARCHITECTURE.md](./ARCHITECTURE.md) and [STORAGE_BACKENDS.md](./STORAGE_BACKENDS.md).
 - **Store-format version safety** – `migrateRawStore()` distinguishes a missing store (fresh start) from a corrupt/too-new one (throws instead of silently overwriting), with a version-dispatch registry for future format changes.
-- **`migrate` command** – `project-memory-mcp migrate --to <json|sqlite> [--from] [--dry-run] [--force] [--set-default]` copies memory between backends, verifies counts, and leaves the source intact (reversible).
+- **`migrate` command** – `context-bridge-mcp migrate --to <json|sqlite> [--from] [--dry-run] [--force] [--set-default]` copies memory between backends, verifies counts, and leaves the source intact (reversible).
 - **Auto-save hook install** – `setup` writes the Claude `Stop` hook (and optional real-time `PostToolUse` hook) into the project's `.claude/settings.json` at the correct installed-package path, and appends Codex `notify`. `doctor` reports whether hooks are wired and have run.
 - **Real-time capture** – opt-in `PostToolUse` mode on `auto-memory` captures incrementally during a session (crash-safe), sharing one cursor + hash dedup with the `Stop` sweep.
 - **Richer extractors** – added TODO/next-step, config/env-value (with secret redaction), and chosen-library-with-reason extractors.
@@ -246,7 +246,7 @@ The extension spawns the MCP server as a child process (same stdio transport Cla
 | MCP communication | `@modelcontextprotocol/sdk` client over stdio |
 | UI components | VS Code TreeView, WebviewPanel (for item editor), StatusBarItem |
 | Package | Standalone repo (`project-memory-vscode`), published to VS Code Marketplace |
-| Dependency | `project-memory-mcp` as peer — extension spawns the server binary |
+| Dependency | `context-bridge-mcp` as peer — extension spawns the server binary |
 
 ### Milestones
 

@@ -5,6 +5,7 @@
   "description": "Project-scoped shared memory as an MCP stdio server for Claude, Codex, and Gemini. Pluggable JSON/SQLite storage, auto-save hooks, and team attribution.",
   "main": "./dist/server.js",
   "bin": {
+    "context-bridge-mcp": "dist/server.js",
     "project-memory-mcp": "dist/server.js"
   },
   "files": [

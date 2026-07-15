@@ -60,7 +60,7 @@ export function migrateRawStore(raw: unknown): Store {
 
   if (version > STORE_VERSION) {
     throw new StoreFormatError(
-      `Store file version ${version} is newer than supported version ${STORE_VERSION}. Upgrade project-memory-mcp.`,
+      `Store file version ${version} is newer than supported version ${STORE_VERSION}. Upgrade context-bridge-mcp.`,
     );
   }
 

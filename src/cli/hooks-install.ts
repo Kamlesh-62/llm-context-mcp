@@ -227,7 +227,7 @@ export async function installCodexNotify(): Promise<{
   }
 
   const comment =
-    "# Added by project-memory-mcp: auto-capture memory from Codex sessions";
+    "# Added by context-bridge-mcp: auto-capture memory from Codex sessions";
   const next = insertTopLevelKey(contents, `${comment}\n${recommended}`);
   await mkdir(path.dirname(configPath), { recursive: true });
   await writeFile(configPath, next);

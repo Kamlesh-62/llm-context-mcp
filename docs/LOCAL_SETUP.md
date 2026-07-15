@@ -16,10 +16,10 @@ Pick the path that fits your workflow:
 
 ```bash
 npm install -g context-bridge-mcp
-project-memory-mcp setup
+context-bridge-mcp setup
 ```
 
-CLI clients will call the globally installed binary (`project-memory-mcp`). Recommended for most developers.
+CLI clients will call the globally installed binary (`context-bridge-mcp`). Recommended for most developers.
 
 ### Option B – On-demand via npx (no install)
 
@@ -47,7 +47,7 @@ npm install
 npm run build
 ```
 
-This keeps the source on disk so you can iterate on hooks or contribute upstream. Instead of `project-memory-mcp`, point your CLIs at `node /Users/itsupport4/Documents/project-memory-mcp-js/dist/server.js`. You normally do **not** run `npm start` manually; CLIs spawn the stdio server when needed.
+This keeps the source on disk so you can iterate on hooks or contribute upstream. Instead of `context-bridge-mcp`, point your CLIs at `node /Users/itsupport4/Documents/project-memory-mcp-js/dist/server.js`. You normally do **not** run `npm start` manually; CLIs spawn the stdio server when needed.
 
 ### Upgrading an existing install
 
@@ -64,8 +64,8 @@ npm install --save-dev context-bridge-mcp@latest
 git pull && npm install && npm run build
 
 # then, in each project you use it in:
-project-memory-mcp setup     # re-writes hooks/config at the new package path
-project-memory-mcp doctor    # verify config, store, hooks, SQLite driver
+context-bridge-mcp setup     # re-writes hooks/config at the new package path
+context-bridge-mcp doctor    # verify config, store, hooks, SQLite driver
 ```
 
 Why re-run `setup`: new releases may add hooks or config the old install never wrote (the auto-save hooks and real-time capture are the main examples). `setup` is idempotent — it merges into `.claude/settings.json`, `.codex/`, and `.gemini/` without clobbering unrelated entries, and refreshes our hook path in place. **Your memory data is never touched by an upgrade** — it lives in `.ai/` and only changes when a tool or hook writes to it. To move memory to a different backend, see [STORAGE_BACKENDS.md](./STORAGE_BACKENDS.md).
@@ -100,7 +100,7 @@ Skip the manual wiring by running the built-in wizard inside the project you wan
 ```bash
 npx context-bridge-mcp setup
 # or, after a global install
-project-memory-mcp setup
+context-bridge-mcp setup
 ```
 
 What it does:
@@ -110,7 +110,7 @@ What it does:
 - Lets you pick how the server should be launched (`npx context-bridge-mcp`, global binary, `node /absolute/path/dist/server.js`, or a fully custom command/args).
 - Lets you choose which CLIs to configure (Claude Code, Gemini CLI, Codex CLI).
 - Updates `~/.claude.json` (with a `.bak` backup), then runs `gemini mcp` / `codex mcp` commands so they point to the right repo. Each CLI must already be installed and available on your `PATH`.
-- Supports automation via flags such as `--project`, `--server-id my-server-name`, `--cli claude,gemini`, `--runner global`, `--command`, `--args`, and `--yes` to skip prompts. Run `project-memory-mcp setup --help` for the full list.
+- Supports automation via flags such as `--project`, `--server-id my-server-name`, `--cli claude,gemini`, `--runner global`, `--command`, `--args`, and `--yes` to skip prompts. Run `context-bridge-mcp setup --help` for the full list.
 - Stores your choices in `<project>/.ai/memory-mcp.json` so subsequent runs can reuse the same server ID + runner. Delete that file to force a fresh prompt.
 
 You can re-run the wizard anytime; it safely overwrites the `project-memory` entries with your latest choices.
@@ -176,7 +176,7 @@ Edit `~/.claude.json` and add/merge this under the matching project block:
 
 Restart Claude CLI from that project folder so it resolves the correct working directory. Optional auto-save hook: keep `.claude/settings.json` from this repo inside your project.
 
-> **Read-only home directories**: export `PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH=/path/to/override.json` (or `CLAUDE_CONFIG_PATH`) before running `project-memory-mcp setup --claude`. The wizard will read/write that custom file instead of `~/.claude.json` and still drop a `.bak` next to it.
+> **Read-only home directories**: export `PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH=/path/to/override.json` (or `CLAUDE_CONFIG_PATH`) before running `context-bridge-mcp setup --claude`. The wizard will read/write that custom file instead of `~/.claude.json` and still drop a `.bak` next to it.
 
 ### Gemini CLI
 
@@ -229,7 +229,7 @@ Always start Codex from the target repo (`cd /Users/.../opulence_api && codex`) 
 
 ## 9. Auto-save hooks
 
-> **Easiest path:** run `project-memory-mcp setup` and answer **Yes** to
+> **Easiest path:** run `context-bridge-mcp setup` and answer **Yes** to
 > "Install auto-save memory hooks?". This writes the Claude `Stop` hook into your
 > project's `.claude/settings.json` (pointing at the installed package's
 > `dist/hooks/auto-memory.js`) and appends Codex's `notify` to `~/.codex/config.toml`.
@@ -238,7 +238,7 @@ Always start Codex from the target repo (`cd /Users/.../opulence_api && codex`) 
 > **npm installs:** the hook command must point at the package inside
 > `node_modules` (e.g. `node "…/node_modules/context-bridge-mcp/dist/hooks/auto-memory.js" stop`),
 > **not** `$CLAUDE_PROJECT_DIR/dist/...`. The `setup` installer resolves this path
-> for you. Verify with `project-memory-mcp doctor`.
+> for you. Verify with `context-bridge-mcp doctor`.
 
 Or wire the hook configs manually to capture info automatically when sessions end:
 

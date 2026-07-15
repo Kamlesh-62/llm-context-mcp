@@ -39,7 +39,7 @@ function parseSwitchArgs(argv: string[]): ParsedSwitchArgs {
 function printSwitchHelp(): void {
   console.log(
     [
-      "Usage: project-memory-mcp switch [options]",
+      "Usage: context-bridge-mcp switch [options]",
       "",
       "Re-applies saved server configuration to selected CLIs without interactive prompts.",
       "Reads configuration from .ai/memory-mcp.json (created by 'setup').",
@@ -51,8 +51,8 @@ function printSwitchHelp(): void {
       "  -h, --help           Show this help text.",
       "",
       "Examples:",
-      "  project-memory-mcp switch",
-      "  project-memory-mcp switch --project ~/code/api --cli claude",
+      "  context-bridge-mcp switch",
+      "  context-bridge-mcp switch --project ~/code/api --cli claude",
     ].join("\n"),
   );
 }
@@ -82,7 +82,7 @@ export async function runSwitch(argv: string[] = []): Promise<number> {
   const defaults = await loadProjectDefaults(projectRoot);
   if (!defaults.serverId || !defaults.runner) {
     console.error(
-      `No saved configuration found at ".ai/memory-mcp.json". Run \`project-memory-mcp setup\` first.`,
+      `No saved configuration found at ".ai/memory-mcp.json". Run \`context-bridge-mcp setup\` first.`,
     );
     return 1;
   }

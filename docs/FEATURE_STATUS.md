@@ -32,8 +32,9 @@
 
 | Category | Feature | Description |
 |---|---|---|
-| Diagnostics | `doctor` | Health checks across CLIs, validates `cwd` + version alignment, emits actionable fixes when `memory_status` fails. |
 | Security | Signed runner allowlist | Verifies the resolved server command against a project-defined hash/signature before wiring CLIs. |
+
+> `doctor` (health checks across CLIs + hooks + storage) is **done** — see §1.
 
 ---
 
@@ -171,9 +172,9 @@ Downstream `memory_save` calls copy `tags` and `priority` so bundles can rank it
 
 | Component | Status |
 |---|---|
-| `hooks/extractors.mjs` — version, dep, commit, error extractors | Exists (runs at session end) |
-| `hooks/auto-save.mjs` — transcript scanner | Exists (session-end hook) |
-| `hooks/cursor.mjs` — sliding window cursor | Exists |
+| `hooks/extractors.ts` — version, dep, commit, error, TODO, config, chosen-library extractors | Exists (Stop + real-time PostToolUse) |
+| `hooks/auto-memory.ts` — transcript scanner (Claude + Codex) | Exists (Stop + PostToolUse) |
+| `hooks/cursor.ts` — sliding window cursor | Exists |
 | Mid-session notification delivery | Implemented (`memory_observe` → `sendLoggingMessage`) |
 | Scoring + threshold gating | Implemented (base × recency × feedback, threshold 3/5) |
 | Feedback loop + weight tuning | Implemented (`.ai/suggestion-feedback.json`) |

@@ -26,6 +26,7 @@ The wizard will:
 - Detect your project directory
 - Let you pick which CLIs to configure (Claude / Gemini / Codex)
 - Write the MCP config for each CLI automatically
+- Offer to install the auto-save hooks (Stop, plus optional real-time `PostToolUse`) at the correct installed-package path
 
 Verify it works — ask your CLI:
 
@@ -47,6 +48,14 @@ project-memory-mcp setup --yes --server-id my-server --runner npx --cli claude,g
 ```
 
 Run `project-memory-mcp setup --help` for all flags.
+
+### Other commands
+
+```bash
+project-memory-mcp doctor    # health-check setup: MCP config, store readable, hooks wired + run
+project-memory-mcp migrate --to sqlite   # move memory between JSON and SQLite (see Storage)
+project-memory-mcp help      # list all commands
+```
 
 ## Usage
 
@@ -98,9 +107,13 @@ Call memory_search with query "auth"
 | `memory_update` | Update an existing item's fields |
 | `memory_delete` | Permanently remove an item |
 | `memory_compact` | Archive old items to keep the store lean |
+| `memory_search_archive` | Search archived (compacted) items |
+| `memory_restore` | Move an archived item back into the active store |
+| `memory_export` | Export the full store (active + archive) |
 | `memory_observe` | Push an observation for pattern detection |
 | `memory_suggest` | See pending suggestions from the engine |
 | `memory_suggestion_feedback` | Accept or reject a suggestion |
+| `memory_configure_suggestions` | Tune the suggestion engine at runtime |
 
 All tools accept an optional `projectRoot` for multi-project routing.
 
@@ -117,31 +130,56 @@ The server detects patterns mid-session and nudges you to save useful context:
 
 ## Auto-Save Hooks
 
-Optional hooks automatically capture versions, dependencies, commits, and error fixes from your session transcript — no manual `memory_save` needed.
+Hooks automatically capture versions, dependencies, commits, error fixes, TODOs, config values, and chosen-library decisions from your session transcript — no manual `memory_save` needed. `setup` installs them for you (at the correct installed-package path).
 
-- **Claude Code**: runs on `Stop` event via `.claude/settings.json`
-- **Gemini CLI**: runs on `SessionEnd` event via `.gemini/settings.json`
-- **Codex CLI**: requires manual setup in `~/.codex/config.toml`
+Two capture modes:
 
-Items are deduplicated across sessions using title hashing and similarity checks.
+- **`Stop` (session end)** — sweeps the whole transcript when the session ends. Installed by default.
+- **`PostToolUse` (real-time)** — captures incrementally after each tool call, so nothing is lost if the session crashes. Opt-in during `setup`; shares one cursor + dedup with the Stop sweep.
 
-Test hooks: `npm run test:hooks`
+Per CLI:
+
+- **Claude Code** — `.claude/settings.json` (`Stop` + optional `PostToolUse`).
+- **Codex CLI** — `notify` bridge in `~/.codex/config.toml`, plus optional native `PostToolUse` hook (`.codex/hooks.json` + `[features] hooks = true`). Codex rollout transcripts (Responses API shape) are normalized to the same extractors.
+- **Gemini CLI** — `SessionEnd` event via `.gemini/settings.json`.
+
+Items are deduplicated across sessions via title hashing and Jaccard similarity, which also decides **update-in-place** vs skip vs add so memory doesn't fill with restatements. Auto-captured items are tagged `source: "auto-hook"`.
+
+Verify hooks are wired and have run: `project-memory-mcp doctor`. Test the extractors: `npm run test:hooks`.
+
+## Storage
+
+Memory lives in one local file per project. Two backends:
+
+- **JSON** (`.ai/memory.json`) — the zero-config default. Human-readable and git-diffable.
+- **SQLite** (`.ai/memory.sqlite`) — opt-in for larger stores / faster search. Binary, not git-diffable. Uses built-in `node:sqlite` (Node ≥22.5) or `better-sqlite3` as a fallback.
+
+Select per project via `.ai/memory-mcp.json` (`{"storage":{"backend":"sqlite"}}`) or the `MEMORY_STORAGE_BACKEND` env var. Move between them with `project-memory-mcp migrate --to <json|sqlite>` — the source is left intact, so it's reversible.
+
+See [`docs/STORAGE_BACKENDS.md`](docs/STORAGE_BACKENDS.md) for the full comparison and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the design.
 
 ## Environment Variables
 
 | Variable | Purpose |
 |---|---|
 | `MEMORY_PROJECT_ROOT` | Force a specific project root |
-| `MEMORY_FILE_PATH` | Override the memory file path |
+| `MEMORY_FILE_PATH` | Override the JSON memory file path |
+| `MEMORY_STORAGE_BACKEND` | Force the storage backend (`json` \| `sqlite`) |
+| `MEMORY_DB_PATH` | Override the SQLite database path |
 | `PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH` | Override Claude config path (default `~/.claude.json`) |
+| `CODEX_HOME` | Override Codex config dir (default `~/.codex`) |
 
 ## Troubleshooting
+
+Run `project-memory-mcp doctor` first — it checks MCP config, store readability, SQLite driver, and whether hooks are wired and have run.
 
 | Problem | Fix |
 |---|---|
 | `memory.json` not created | Run `memory_status` — project root is probably wrong. Fix `cwd` in MCP config. |
 | Server not available | Check CLI MCP config. Confirm `node -v` works and the server file exists. |
 | Data not saved | You must call a write tool. Chat alone does not persist. |
+| Auto-save never fires | Run `doctor` — the hook may not be installed. Re-run `setup` and accept the hooks step. |
+| SQLite selected but errors | Node < 22.5 needs `npm i better-sqlite3`. `doctor` reports driver availability. |
 
 ## Development
 

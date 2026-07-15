@@ -9,7 +9,7 @@ You (any CLI) ──► MCP Server ──► .ai/memory.json (per project)
 ## Install
 
 ```bash
-npm install -g project-memory-mcp
+npm install -g context-bridge-mcp
 ```
 
 ## Upgrading
@@ -17,7 +17,7 @@ npm install -g project-memory-mcp
 Already have it installed? Update, then re-sync each project:
 
 ```bash
-npm update -g project-memory-mcp        # get the new version
+npm update -g context-bridge-mcp        # get the new version
 cd ~/my-project
 project-memory-mcp setup                 # re-writes hooks at the new package path
 project-memory-mcp doctor                # verify config, store, hooks, SQLite driver

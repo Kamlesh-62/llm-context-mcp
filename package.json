@@ -1,8 +1,8 @@
 {
-  "name": "project-memory-mcp",
-  "version": "0.1.7",
+  "name": "context-bridge-mcp",
+  "version": "1.1.0",
   "type": "module",
-  "description": "Project-scoped centralized memory as an MCP stdio server (JSON file backend).",
+  "description": "Project-scoped shared memory as an MCP stdio server for Claude, Codex, and Gemini. Pluggable JSON/SQLite storage, auto-save hooks, and team attribution.",
   "main": "./dist/server.js",
   "bin": {
     "project-memory-mcp": "dist/server.js"

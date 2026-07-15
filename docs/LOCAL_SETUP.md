@@ -15,7 +15,7 @@ Pick the path that fits your workflow:
 ### Option A – Global CLI (one-time install)
 
 ```bash
-npm install -g project-memory-mcp
+npm install -g context-bridge-mcp
 project-memory-mcp setup
 ```
 
@@ -24,7 +24,7 @@ CLI clients will call the globally installed binary (`project-memory-mcp`). Reco
 ### Option B – On-demand via npx (no install)
 
 ```bash
-npx project-memory-mcp setup
+npx context-bridge-mcp setup
 ```
 
 Great for quickly wiring a single machine—you always get the published build without keeping a copy in your repo.
@@ -32,11 +32,11 @@ Great for quickly wiring a single machine—you always get the published build w
 ### Option C – Project dependency (package.json)
 
 ```bash
-npm install --save-dev project-memory-mcp   # inside your app repo
-npx project-memory-mcp setup --project .
+npm install --save-dev context-bridge-mcp   # inside your app repo
+npx context-bridge-mcp setup --project .
 ```
 
-Now teammates can run `npm run memory:setup` or `npx project-memory-mcp serve` without installing anything globally. Point CLI configs at `node ./node_modules/project-memory-mcp/dist/server.js` or `npx project-memory-mcp`.
+Now teammates can run `npm run memory:setup` or `npx context-bridge-mcp serve` without installing anything globally. Point CLI configs at `node ./node_modules/context-bridge-mcp/dist/server.js` or `npx context-bridge-mcp`.
 
 ### Option D – Local clone (development / hacking)
 
@@ -55,11 +55,11 @@ Getting a newer version is a package update plus a per-project re-sync:
 
 ```bash
 # Global install (Option A)
-npm update -g project-memory-mcp
+npm update -g context-bridge-mcp
 
 # npx (Option B) — nothing to update; it always fetches the latest
 # Project dependency (Option C)
-npm install --save-dev project-memory-mcp@latest
+npm install --save-dev context-bridge-mcp@latest
 # Local clone (Option D)
 git pull && npm install && npm run build
 
@@ -90,7 +90,7 @@ node dist/server.js
 
 # Use a repo-local Claude config file instead of ~/.claude.json
 PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH=.tmp/claude-test.json \
-  npx project-memory-mcp setup --claude
+  npx context-bridge-mcp setup --claude
 ```
 
 ## 4. Guided setup command (recommended)
@@ -98,7 +98,7 @@ PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH=.tmp/claude-test.json \
 Skip the manual wiring by running the built-in wizard inside the project you want to enable (or pass `--project /path/to/project`):
 
 ```bash
-npx project-memory-mcp setup
+npx context-bridge-mcp setup
 # or, after a global install
 project-memory-mcp setup
 ```
@@ -107,7 +107,7 @@ What it does:
 
 - Prompts for a server ID (defaults to the slugified repo folder). IDs must match `[a-z0-9-]{3,32}`; supply `--server-id <name>` when running with `--yes`/`--project`.
 - Prompts for the project directory (defaults to your current working directory).
-- Lets you pick how the server should be launched (`npx project-memory-mcp`, global binary, `node /absolute/path/dist/server.js`, or a fully custom command/args).
+- Lets you pick how the server should be launched (`npx context-bridge-mcp`, global binary, `node /absolute/path/dist/server.js`, or a fully custom command/args).
 - Lets you choose which CLIs to configure (Claude Code, Gemini CLI, Codex CLI).
 - Updates `~/.claude.json` (with a `.bak` backup), then runs `gemini mcp` / `codex mcp` commands so they point to the right repo. Each CLI must already be installed and available on your `PATH`.
 - Supports automation via flags such as `--project`, `--server-id my-server-name`, `--cli claude,gemini`, `--runner global`, `--command`, `--args`, and `--yes` to skip prompts. Run `project-memory-mcp setup --help` for the full list.

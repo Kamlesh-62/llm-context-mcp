@@ -9,6 +9,7 @@ import {
 import { autoCompactStore } from "../maintenance.js";
 import { withStore } from "../storage.js";
 import { nowIso } from "../runtime.js";
+import { resolveAuthor } from "../identity.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { MemoryItem, MemoryProposal } from "../types.js";
 
@@ -176,6 +177,7 @@ export function registerProposalTools(server: McpServer): void {
         p.updatedAt = decidedAt;
 
         if (action === "approve") {
+          const author = resolveAuthor(ctx.projectRoot);
           const item: MemoryItem = {
             id: newId("mem"),
             type: p.type,
@@ -187,6 +189,7 @@ export function registerProposalTools(server: McpServer): void {
             updatedAt: decidedAt,
             lastUsedAt: decidedAt,
             source: "proposal",
+            ...(author ? { author } : {}),
             proposalId: p.id,
           };
           st.items.push(item);

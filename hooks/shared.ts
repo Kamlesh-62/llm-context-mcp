@@ -20,6 +20,7 @@ const ROOT = resolve(fileURLToPath(import.meta.url), "../..");
 export const { withStore }                          = await import(join(ROOT, "src", "storage.js"));
 export const { newId, normalizeTags, validateType } = await import(join(ROOT, "src", "domain.js"));
 export const { nowIso }                             = await import(join(ROOT, "src", "runtime.js"));
+export const { resolveAuthor }                      = await import(join(ROOT, "src", "identity.js"));
 
 export type ExtractedItem = {
   type: MemoryType;
@@ -138,6 +139,7 @@ export async function saveExtractedItems(params: {
           continue;
         }
 
+        const author = resolveAuthor(projectDir);
         store.items.push({
           id: newId("mem"),
           type: validateType(item.type),
@@ -145,6 +147,7 @@ export async function saveExtractedItems(params: {
           content: (item.content ?? "").slice(0, LIMITS.maxContentChars),
           tags: normalizeTags([...(item.tags ?? []), "auto-hook"]),
           source: "auto-hook",
+          ...(author ? { author } : {}),
           pinned: false,
           createdAt: nowIso(),
           updatedAt: nowIso(),

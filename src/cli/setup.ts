@@ -5,6 +5,7 @@ import type { CliSelection, ParsedArgs } from "./types.js";
 import { parseArgs, printHelp } from "./args.js";
 import { resolveRunner, snapshotRunner } from "./runners.js";
 import { configureClaude, configureGemini, configureCodex, checkExistingClaudeEntry } from "./config-writers.js";
+import { loadIdentity, saveIdentity, resolveAuthor } from "../identity.js";
 import {
   installClaudeStopHook,
   installClaudePostToolUseHook,
@@ -68,11 +69,17 @@ export async function runSetup(argv: string[] = []): Promise<number> {
       return 0;
     }
 
+    await resolveIdentity(rl, parsedArgs, projectRoot);
+    const author = resolveAuthor(projectRoot);
+
     console.log("\nConfiguration preview:");
     console.log(`  Project root: ${projectRoot}`);
     console.log(`  Server ID: ${serverId}`);
     console.log(`  Server command: ${formatCommand(runner.command, runner.args)}`);
     console.log(`  Target CLIs: ${listSelectedClis(selection)}`);
+    if (author) {
+      console.log(`  Author: ${author.name}${author.team ? ` (${author.team})` : ""}`);
+    }
 
     if (!parsedArgs.acceptDefaults) {
       const proceed = await askYesNo(rl, "Continue with these settings?", true, parsedArgs);
@@ -247,6 +254,38 @@ async function resolveServerId(
     } catch (error) {
       console.log(`  ${errorMessage(error)}`);
     }
+  }
+}
+
+/**
+ * Prompt for the author identity (name + team) used to attribute memory items,
+ * and persist it to the global identity file. Skipped in non-interactive runs.
+ * Existing values are shown as defaults so a re-run is a quick confirm.
+ */
+async function resolveIdentity(
+  rl: readline.Interface,
+  args: ParsedArgs,
+  projectRoot: string,
+): Promise<void> {
+  if (args.acceptDefaults) return; // non-interactive: keep whatever is set / env / git
+
+  const current = loadIdentity();
+  const gitName = resolveAuthor(projectRoot)?.name;
+  const nameDefault = current.name ?? gitName;
+
+  console.log(
+    "\nWho are you? Used to attribute memory items when a team shares a store.",
+  );
+  const nameSuffix = nameDefault ? ` [${nameDefault}]` : "";
+  const nameAnswer = (await rl.question(`  Your name${nameSuffix}: `)).trim();
+  const name = nameAnswer || nameDefault || "";
+
+  const teamSuffix = current.team ? ` [${current.team}]` : "";
+  const teamAnswer = (await rl.question(`  Your team (optional)${teamSuffix}: `)).trim();
+  const team = teamAnswer || current.team || "";
+
+  if (name || team) {
+    saveIdentity({ name, team });
   }
 }
 

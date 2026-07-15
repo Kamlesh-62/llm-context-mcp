@@ -25,6 +25,7 @@
 - **Richer extractors** – added TODO/next-step, config/env-value (with secret redaction), and chosen-library-with-reason extractors.
 - **Smart dedup (ADD/UPDATE/SKIP)** – auto-captured items now update a near-duplicate in place (refreshing content, merging tags) instead of only add-or-skip, keeping memory from filling with restatements.
 - **Codex transcript support** – `hooks/codex-transcript.ts` normalizes Codex rollout files (Responses API shape) into the extractor format, so auto-capture actually works for Codex (previously extracted nothing). Includes a native `PostToolUse` hook installer (`.codex/hooks.json` + `[features] hooks = true`) for real-time Codex capture, plus error-heuristic hardening (exit-code-authoritative, benign search exit-1 ignored).
+- **Team attribution** – new items carry an optional `author` (`{ name, team }`) so a shared store records who added what. Identity is per-user (`~/.project-memory-mcp/identity.json`, set by `setup`), resolved env → file → git `user.name`, and never written into the committable `.ai/` store. Stamped across `memory_save`, proposal approval, and the auto-save hooks; surfaced by `doctor`. See `src/identity.ts`.
 
 ---
 

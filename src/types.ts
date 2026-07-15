@@ -7,6 +7,11 @@ export type MemoryType =
   | "architecture"
   | "glossary";
 
+export interface MemoryItemAuthor {
+  name: string;
+  team?: string;
+}
+
 export interface MemoryItem {
   id: string;
   type: MemoryType;
@@ -14,6 +19,7 @@ export interface MemoryItem {
   content: string;
   tags: string[];
   source?: string;
+  author?: MemoryItemAuthor;
   pinned?: boolean;
   createdAt: string;
   updatedAt: string;

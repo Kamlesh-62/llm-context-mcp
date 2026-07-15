@@ -6,6 +6,7 @@ import { resolveStoreLocation } from "../storage/config.js";
 import { migrateRawStore } from "../storage/migrations.js";
 import { sqliteAvailable } from "../storage/sqlite-driver.js";
 import { claudeStopHookInstalled, resolveHookScriptPath } from "./hooks-install.js";
+import { resolveAuthor } from "../identity.js";
 
 type Check = {
   name: string;
@@ -150,8 +151,12 @@ export async function runDoctor(argv: string[]): Promise<number> {
     },
   ];
 
+  const author = resolveAuthor(projectRoot);
   console.log(`\nProject: ${projectRoot}`);
-  console.log(`Memory:  ${memoryFilePath}\n`);
+  console.log(`Memory:  ${memoryFilePath}`);
+  console.log(
+    `Author:  ${author ? `${author.name}${author.team ? ` (${author.team})` : ""}` : "not set — run setup to attribute your memory items"}\n`,
+  );
 
   let failures = 0;
   for (const check of checks) {

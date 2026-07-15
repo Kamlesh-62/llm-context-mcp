@@ -37,6 +37,7 @@ project-memory-mcp setup
 The wizard will:
 - Ask for a server ID (e.g. `my-project-memory`)
 - Detect your project directory
+- Ask your name and team so shared memory records who added what (see [Team attribution](#team-attribution))
 - Let you pick which CLIs to configure (Claude / Gemini / Codex)
 - Write the MCP config for each CLI automatically
 - Offer to install the auto-save hooks (Stop, plus optional real-time `PostToolUse`) at the correct installed-package path
@@ -160,6 +161,20 @@ Items are deduplicated across sessions via title hashing and Jaccard similarity,
 
 Verify hooks are wired and have run: `project-memory-mcp doctor`. Test the extractors: `npm run test:hooks`.
 
+## Team attribution
+
+When a team shares a memory store, every item can record **who added it**. `setup` asks for your name and (optional) team once; new items are then stamped with an `author` field — whether you save them by hand (`memory_save`), through a proposal, or via the auto-save hooks.
+
+Your identity is per-user, not per-project: it lives in `~/.project-memory-mcp/identity.json` and is reused everywhere. It is **never** written into the shared `.ai/` store, so it can't leak into git.
+
+Resolution order (first hit wins):
+
+1. env `MEMORY_AUTHOR_NAME` / `MEMORY_AUTHOR_TEAM` — for CI or one-offs
+2. `~/.project-memory-mcp/identity.json` — what `setup` writes
+3. git `user.name` — a name-only fallback so attribution works even before you run setup
+
+Change it any time by re-running `project-memory-mcp setup`, or check the resolved value with `project-memory-mcp doctor`. If no name resolves, items are saved without an `author` — nothing breaks.
+
 ## Storage
 
 Memory lives in one local file per project. Two backends:
@@ -179,6 +194,9 @@ See [`docs/STORAGE_BACKENDS.md`](docs/STORAGE_BACKENDS.md) for the full comparis
 | `MEMORY_FILE_PATH` | Override the JSON memory file path |
 | `MEMORY_STORAGE_BACKEND` | Force the storage backend (`json` \| `sqlite`) |
 | `MEMORY_DB_PATH` | Override the SQLite database path |
+| `MEMORY_AUTHOR_NAME` | Author name stamped on new items (overrides the saved identity) |
+| `MEMORY_AUTHOR_TEAM` | Author team stamped on new items |
+| `PROJECT_MEMORY_MCP_HOME` | Override the per-user config dir (default `~/.project-memory-mcp`) |
 | `PROJECT_MEMORY_MCP_CLAUDE_CONFIG_PATH` | Override Claude config path (default `~/.claude.json`) |
 | `CODEX_HOME` | Override Codex config dir (default `~/.codex`) |
 

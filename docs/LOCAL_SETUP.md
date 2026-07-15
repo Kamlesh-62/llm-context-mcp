@@ -49,6 +49,27 @@ npm run build
 
 This keeps the source on disk so you can iterate on hooks or contribute upstream. Instead of `project-memory-mcp`, point your CLIs at `node /Users/itsupport4/Documents/project-memory-mcp-js/dist/server.js`. You normally do **not** run `npm start` manually; CLIs spawn the stdio server when needed.
 
+### Upgrading an existing install
+
+Getting a newer version is a package update plus a per-project re-sync:
+
+```bash
+# Global install (Option A)
+npm update -g project-memory-mcp
+
+# npx (Option B) — nothing to update; it always fetches the latest
+# Project dependency (Option C)
+npm install --save-dev project-memory-mcp@latest
+# Local clone (Option D)
+git pull && npm install && npm run build
+
+# then, in each project you use it in:
+project-memory-mcp setup     # re-writes hooks/config at the new package path
+project-memory-mcp doctor    # verify config, store, hooks, SQLite driver
+```
+
+Why re-run `setup`: new releases may add hooks or config the old install never wrote (the auto-save hooks and real-time capture are the main examples). `setup` is idempotent — it merges into `.claude/settings.json`, `.codex/`, and `.gemini/` without clobbering unrelated entries, and refreshes our hook path in place. **Your memory data is never touched by an upgrade** — it lives in `.ai/` and only changes when a tool or hook writes to it. To move memory to a different backend, see [STORAGE_BACKENDS.md](./STORAGE_BACKENDS.md).
+
 ## 3. Optional environment overrides
 
 The server auto-detects project root, but you can override behavior with env vars:

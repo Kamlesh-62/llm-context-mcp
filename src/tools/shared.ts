@@ -16,6 +16,7 @@ Project Memory MCP quick help
 Common prompts:
 - Call memory_status and show the output. → confirms project + .ai path.
 - Call memory_get_bundle with {"prompt":"<your task>"} → load context.
+- Survey cheaply first: Call memory_map → a domain-grouped index (id/title/type). Then Call memory_expand with {"ids":[...]} → full content for just the ids you need. Cheaper than loading everything.
 - When you finish work, Call memory_save with {"title":"...", "content":"...", "tags":["..."], "source":"claude"} → saves the new fact/decision immediately.
 - Prefer approvals? Call memory_propose with {"items":[...]} then memory_approve_proposal.
 - Need to find info later? Call memory_search with {"query":"...", "includeContent":true}.

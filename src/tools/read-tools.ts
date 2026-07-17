@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   safeSnippet,
   rankItems,
+  buildMemoryMap,
   normalizeTags,
   normalizeDomain,
   validateType,
@@ -256,6 +257,96 @@ export function registerReadTools(server: McpServer): void {
       }
 
       return { content: [{ type: "text", text: out }] };
+    },
+  );
+
+  // memory_map
+  server.registerTool(
+    "memory_map",
+    {
+      description:
+        "List a compact, domain-grouped index of memory (id, title, type) so you can survey the whole store cheaply, then pull only what you need with memory_expand. Prefer this over loading every item.",
+      inputSchema: {
+        types: z.array(z.string()).optional().describe("Filter by item types"),
+        domain: z.string().optional().describe("Only this domain (grouping bucket)"),
+        includeSnippet: z
+          .boolean()
+          .default(false)
+          .describe("Add a one-line snippet per item (costs more tokens)"),
+        projectRoot: projectRootInput,
+      },
+    },
+    async ({ types, domain, includeSnippet, projectRoot }) => {
+      const typeSet = types?.length ? new Set(types.map((t) => validateType(t))) : null;
+      const domainFilter = normalizeDomain(domain);
+
+      let map: ReturnType<typeof buildMemoryMap> = { total: 0, groups: [] };
+      await withStore(async (st) => {
+        let items = st.items.filter((it) => !isExpired(it));
+        if (typeSet) items = items.filter((it) => typeSet.has(validateType(it.type)));
+        if (domainFilter) items = items.filter((it) => it.domain === domainFilter);
+        map = buildMemoryMap(items, { includeSnippet });
+        return false;
+      }, storeOptions(projectRoot));
+
+      return { content: [{ type: "text", text: JSON.stringify(map, null, 2) }] };
+    },
+  );
+
+  // memory_expand
+  server.registerTool(
+    "memory_expand",
+    {
+      description:
+        "Fetch the full content of specific memory items by id — the drill-in half of memory_map. Pass the ids you picked from the map.",
+      inputSchema: {
+        ids: z
+          .array(z.string().min(1))
+          .min(1)
+          .max(50)
+          .describe("Item ids to expand (from memory_map)"),
+        projectRoot: projectRootInput,
+      },
+    },
+    async ({ ids, projectRoot }) => {
+      const idSet = new Set(ids);
+      const now = nowIso();
+      const found: Array<Record<string, unknown>> = [];
+
+      await withStore(async (st) => {
+        let updated = false;
+        for (const it of st.items) {
+          if (!idSet.has(it.id) || isExpired(it)) continue;
+          found.push({
+            id: it.id,
+            type: it.type,
+            title: it.title,
+            ...(it.domain ? { domain: it.domain } : {}),
+            tags: it.tags || [],
+            pinned: Boolean(it.pinned),
+            content: String(it.content || ""),
+            createdAt: it.createdAt,
+            updatedAt: it.updatedAt,
+            ...(it.source ? { source: it.source } : {}),
+            ...(it.author ? { author: it.author } : {}),
+          });
+          it.lastUsedAt = now;
+          updated = true;
+        }
+        return updated;
+      }, storeOptions(projectRoot));
+
+      const foundIds = new Set(found.map((f) => f.id as string));
+      const missing = ids.filter((id) => !foundIds.has(id));
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ count: found.length, items: found, missing }, null, 2),
+          },
+        ],
+      };
     },
   );
 }

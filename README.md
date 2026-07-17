@@ -86,6 +86,18 @@ The core loop is three steps:
 
 Any CLI (Claude, Codex, Gemini) can then pick up where another left off.
 
+### Survey cheaply, then drill in
+
+For a large store, don't load everything — **map first, expand only what you need**:
+
+```
+1. memory_map            →  domain-grouped index (id, title, type) for the whole store
+2. ... pick the ids that matter ...
+3. memory_expand {ids}   →  full content for just those items
+```
+
+The map is a fraction of the tokens of the full store (id/title/type only), so an agent can see *everything that exists* for cheap, then pull the handful it actually needs. `memory_map` accepts `types`, `domain`, and `includeSnippet`; `memory_expand` takes the `ids` you chose and returns their full content (and marks them recently used).
+
 ### Save something
 
 ```
@@ -115,6 +127,8 @@ Call memory_search with query "auth"
 | `memory_status` | Check setup — shows project root and memory file path |
 | `memory_help` | Quick-start tips and sample prompts |
 | `memory_get_bundle` | Load ranked context for your current task |
+| `memory_map` | Cheap domain-grouped index (id/title/type) — survey the whole store |
+| `memory_expand` | Full content for specific ids — the drill-in after `memory_map` |
 | `memory_search` | Search saved items by keyword or tags |
 | `memory_save` | Save a memory item directly |
 | `memory_propose` | Save with an approval step (creates a proposal) |

@@ -156,6 +156,73 @@ export function rankItems(
     .sort((a, b) => b.score - a.score);
 }
 
+/** One line in a memory map — the cheap index the LLM scans before drilling in. */
+export interface MemoryMapEntry {
+  id: string;
+  title: string;
+  type: string;
+  snippet?: string;
+}
+
+/** A domain's slice of the map: how many items, and their index lines. */
+export interface MemoryMapGroup {
+  domain: string;
+  count: number;
+  items: MemoryMapEntry[];
+}
+
+export interface MemoryMap {
+  total: number;
+  groups: MemoryMapGroup[];
+}
+
+/** Bucket key for an item with no domain set. */
+export const NO_DOMAIN = "(none)";
+
+/**
+ * Build a compact, domain-grouped index of items — the "map" half of
+ * map-then-drill retrieval. The point is minimal tokens: each entry is just
+ * id/title/type (plus an optional one-line snippet), so an agent can survey the
+ * whole store cheaply and then `memory_expand` only the ids it actually needs,
+ * instead of loading every item's full content into context.
+ *
+ * Groups are sorted by size (largest domain first), then name; items within a
+ * group are newest-first. Pure and deterministic — the caller filters
+ * expired/typed items before passing them in.
+ */
+export function buildMemoryMap(
+  items: MemoryItem[],
+  opts: { includeSnippet?: boolean } = {},
+): MemoryMap {
+  const byDomain = new Map<string, MemoryItem[]>();
+  for (const it of items) {
+    const key = it.domain || NO_DOMAIN;
+    const bucket = byDomain.get(key);
+    if (bucket) bucket.push(it);
+    else byDomain.set(key, [it]);
+  }
+
+  const recency = (it: MemoryItem): number =>
+    Date.parse(it.updatedAt || it.createdAt || "") || 0;
+
+  const groups: MemoryMapGroup[] = [...byDomain.entries()]
+    .map(([domain, list]) => ({
+      domain,
+      count: list.length,
+      items: [...list]
+        .sort((a, b) => recency(b) - recency(a))
+        .map((it) => ({
+          id: it.id,
+          title: it.title,
+          type: it.type,
+          ...(opts.includeSnippet ? { snippet: safeSnippet(it.content, 120) } : {}),
+        })),
+    }))
+    .sort((a, b) => b.count - a.count || a.domain.localeCompare(b.domain));
+
+  return { total: items.length, groups };
+}
+
 export function tokenize(s: unknown): string[] {
   return String(s || "")
     .toLowerCase()

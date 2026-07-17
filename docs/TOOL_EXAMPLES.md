@@ -25,9 +25,13 @@ Copy-paste examples for all 19 MCP tools. All parameters shown are the tool inpu
   "includeContent": true,
   "tags": ["security"],
   "types": ["decision", "architecture"],
+  "domain": "auth",
+  "includeSuperseded": false,
   "staleOnly": false
 }
 ```
+
+Superseded items (targets of a `supersedes` link) are hidden unless `includeSuperseded` is true.
 
 ### memory_get_bundle
 
@@ -37,7 +41,33 @@ Copy-paste examples for all 19 MCP tools. All parameters shown are the tool inpu
   "maxItems": 12,
   "maxChars": 6000,
   "includePinned": true,
-  "types": ["decision", "constraint"]
+  "types": ["decision", "constraint"],
+  "domain": "auth"
+}
+```
+
+Ranking is BM25-lite (rare terms and title hits weighted higher) plus boosts for tag/domain/pinned/type/recency. The bundle also pulls one hop of the chosen items' links, and hides superseded items.
+
+### memory_map
+
+Survey the whole store cheaply — a domain-grouped index of `id`/`title`/`type`, far fewer tokens than loading full content.
+
+```json
+{
+  "domain": "auth",
+  "types": ["decision"],
+  "includeSnippet": false,
+  "includeSuperseded": false
+}
+```
+
+### memory_expand
+
+Fetch full content for the ids you picked from `memory_map`.
+
+```json
+{
+  "ids": ["mem_abc123def456", "mem_789ghi012jkl"]
 }
 ```
 
@@ -51,13 +81,28 @@ Copy-paste examples for all 19 MCP tools. All parameters shown are the tool inpu
   "content": "Chose JWT over session cookies for stateless auth. Tokens expire after 24h.",
   "type": "decision",
   "tags": ["auth", "api"],
+  "domain": "auth",
   "pinned": true,
   "expiresAt": "2026-06-01T00:00:00Z",
   "supersede": false
 }
 ```
 
-With `supersede: true`, if a similar item exists, the most similar one is archived automatically.
+With `supersede: true`, if a similar item exists, the most similar one is archived automatically. `domain` is an optional grouping bucket (one per item).
+
+### memory_link
+
+Create a typed edge between two items. Relations: `part-of`, `relates-to`, `depends-on`, `supersedes`, `example-of`. Pass `"remove": true` to delete the edge.
+
+```json
+{
+  "from": "mem_abc123def456",
+  "to": "mem_789ghi012jkl",
+  "rel": "depends-on"
+}
+```
+
+A `supersedes` link marks the target stale, so retrieval prefers the source.
 
 ### memory_pin
 
@@ -75,7 +120,8 @@ With `supersede: true`, if a similar item exists, the most similar one is archiv
   "itemId": "mem_abc123def456",
   "title": "Updated title",
   "content": "Updated content",
-  "tags": ["new-tag"]
+  "tags": ["new-tag"],
+  "domain": "auth"
 }
 ```
 

@@ -26,6 +26,13 @@
 - **Smart dedup (ADD/UPDATE/SKIP)** – auto-captured items now update a near-duplicate in place (refreshing content, merging tags) instead of only add-or-skip, keeping memory from filling with restatements.
 - **Codex transcript support** – `hooks/codex-transcript.ts` normalizes Codex rollout files (Responses API shape) into the extractor format, so auto-capture actually works for Codex (previously extracted nothing). Includes a native `PostToolUse` hook installer (`.codex/hooks.json` + `[features] hooks = true`) for real-time Codex capture, plus error-heuristic hardening (exit-code-authoritative, benign search exit-1 ignored).
 - **Team attribution** – new items carry an optional `author` (`{ name, team }`) so a shared store records who added what. Identity is per-user (`~/.project-memory-mcp/identity.json`, set by `setup`), resolved env → file → git `user.name`, and never written into the committable `.ai/` store. Stamped across `memory_save`, proposal approval, and the auto-save hooks; surfaced by `doctor`. See `src/identity.ts`.
+- **Markdown import** – `context-bridge-mcp import <file.md>` parses YAML-frontmatter memory blocks into the active store (json or sqlite). Robust against bare `---` horizontal rules in bodies; regenerates ids, preserves `created`/`updated`, dedups by title (idempotent), maps `<!-- N. NAME -->` section banners to domains. Flags: `--dry-run`, `--tag-sections`, `--source`.
+- **Visual viewer** – `context-bridge-mcp view [--open] [--out]` renders any backend to a single self-contained HTML page (no external assets, offline). Search + type/domain filters; List view and a **Graph** view (domain clusters + typed link edges, superseded items dimmed).
+- **Turn off auto-save** – `MEMORY_AUTOSAVE=off` (temporary, hooks early-exit) or `context-bridge-mcp uninstall-hooks [--cli claude,codex]` (permanent, removes only our hooks). See `src/cli/uninstall-hooks.ts`.
+- **Memory organization — domains** – optional `domain` on items (one grouping bucket). `memory_save`/`memory_update` accept it; `memory_search`/`memory_get_bundle`/`memory_map` filter by it.
+- **Memory organization — BM25-lite ranking** – `rankItems()` replaces flat substring scoring for retrieval: corpus IDF + length normalization, title tokens weighted, plus tag/domain/pinned/type/recency boosts. See `src/domain.ts`.
+- **Memory organization — map/expand** – `memory_map` returns a cheap domain-grouped index (id/title/type); `memory_expand` fetches full content for chosen ids. Map-then-drill keeps read cost flat as the store grows (~18× cheaper survey on a 26-item store).
+- **Memory organization — typed links** – optional `links[]` on items (`part-of`, `relates-to`, `depends-on`, `supersedes`, `example-of`). `memory_link` adds/removes edges; `memory_get_bundle` expands one hop of the chosen items' links; `supersedes` hides the stale target from bundle/search/map (`includeSuperseded` to show). `memory_delete` strips dangling links. Rendered as edges in the viewer's Graph view.
 
 ---
 
@@ -43,7 +50,9 @@
 
 Five features ranked by impact.
 
-### 3.1 Memory Decay & Staleness Detection
+### 3.1 Memory Decay & Staleness Detection — **Done**
+
+`lastUsedAt` is stamped on every bundle/expand access, and `memory_search { staleOnly: true }` surfaces items unused for `staleDays` (default 90). Kept here for history.
 
 **Priority**: High
 
@@ -56,6 +65,8 @@ Five features ranked by impact.
 
 ### 3.2 Contradiction Detection on Save
 
+**Status**: Partially shipped — `supersedes` links let an agent explicitly mark an old item stale (hidden from retrieval); `memory_save --supersede` auto-archives the closest match. Automatic conflict *detection* on save is still open.
+
 **Priority**: High — most differentiating feature
 
 When `memory_save` writes "Node version: 20.11.0", it should detect an existing "Node version: 18.17.1" and either auto-supersede or return both items for the agent to resolve.
@@ -65,7 +76,9 @@ When `memory_save` writes "Node version: 20.11.0", it should detect an existing 
 - Use token overlap or heuristics to detect conflicts
 - Return conflicts in the tool response so the agent decides
 
-### 3.3 Archive Search & Restore
+### 3.3 Archive Search & Restore — **Done**
+
+`memory_search_archive` and `memory_restore` are implemented (see the tool list). Kept here for history.
 
 **Priority**: Medium
 
@@ -76,7 +89,9 @@ Compacted items in `.ai/memory-archive.json` are invisible to all tools. Agents 
 - `memory_restore` — move an archived item back to the active store
 - Reuse existing scoring logic from `domain.js`
 
-### 3.4 Item TTL / Expiry
+### 3.4 Item TTL / Expiry — **Done**
+
+`expiresAt` (ISO) is supported on `memory_save`; bundle/search/map skip expired items and compaction archives them. Kept here for history.
 
 **Priority**: Medium
 

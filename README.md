@@ -68,6 +68,8 @@ Run `context-bridge-mcp setup --help` for all flags.
 ```bash
 context-bridge-mcp doctor    # health-check setup: MCP config, store readable, hooks wired + run
 context-bridge-mcp migrate --to sqlite       # move memory between JSON and SQLite (see Storage)
+context-bridge-mcp import notes.md           # import a markdown memory file (see Importing markdown)
+context-bridge-mcp view --open               # render memory to a browsable HTML page (see Viewing memory)
 context-bridge-mcp uninstall-hooks           # remove the auto-save hooks (see Turning off auto-save)
 context-bridge-mcp help      # list all commands
 ```
@@ -195,6 +197,41 @@ Memory lives in one local file per project. Two backends:
 Select per project via `.ai/memory-mcp.json` (`{"storage":{"backend":"sqlite"}}`) or the `MEMORY_STORAGE_BACKEND` env var. Move between them with `context-bridge-mcp migrate --to <json|sqlite>` — the source is left intact, so it's reversible.
 
 See [`docs/STORAGE_BACKENDS.md`](docs/STORAGE_BACKENDS.md) for the full comparison and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the design.
+
+## Importing markdown
+
+Have a hand-written memory file (YAML-frontmatter blocks — `type`/`title`/`tags`/`created`/`updated` + a markdown body)? Pull it into the store:
+
+```bash
+context-bridge-mcp import notes.md --dry-run   # preview what would be imported
+context-bridge-mcp import notes.md             # import into the active backend
+```
+
+Each block becomes a memory item (ids are regenerated; `created`/`updated` are preserved). Re-running is safe — near-duplicate titles are skipped, so import is idempotent. Bare `---` horizontal rules inside item bodies are handled (only `---` immediately followed by a `key:` line is treated as a frontmatter fence). Flags: `--tag-sections` (adds each `<!-- N. NAME -->` banner as a tag), `--source <s>`, `--project <dir>`.
+
+To go markdown → readable JSON → SQLite in one flow:
+
+```bash
+context-bridge-mcp import notes.md                      # lands in .ai/memory.json (inspect / git diff)
+context-bridge-mcp migrate --to sqlite --set-default    # then move the whole store to SQLite
+```
+
+## Viewing memory
+
+SQLite is a binary file — you can't open it to read your memories. Render any backend (JSON *or* SQLite) to a self-contained HTML page:
+
+```bash
+context-bridge-mcp view --open        # writes .ai/memory-view.html and opens it
+context-bridge-mcp view --out ~/mem.html
+```
+
+The page is one file with no external assets (works offline, shareable): search box + type filter over all items, each shown as a card with tags, dates, and content. Regenerate any time — it's gitignored by default.
+
+Power-user peek at raw SQLite (items are stored as JSON blobs, so it's terse):
+
+```bash
+sqlite3 .ai/memory.sqlite "select json_extract(data,'\$.title') from items;"
+```
 
 ## Environment Variables
 

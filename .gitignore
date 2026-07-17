@@ -11,3 +11,6 @@ pnpm-debug.log*
 .env.*
 !.env.example
 .tmp/
+
+# Generated memory viewer
+.ai/memory-view.html

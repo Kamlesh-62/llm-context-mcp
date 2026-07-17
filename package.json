@@ -1,6 +1,6 @@
 {
   "name": "context-bridge-mcp",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "type": "module",
   "description": "Project-scoped shared memory as an MCP stdio server for Claude, Codex, and Gemini. Pluggable JSON/SQLite storage, auto-save hooks, and team attribution.",
   "main": "./dist/server.js",

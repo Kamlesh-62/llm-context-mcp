@@ -41,6 +41,121 @@ export function scoreItem(
   return score;
 }
 
+/**
+ * Slugify a free-text domain into a stable bucket key: lowercased, non-alnum
+ * runs collapsed to `-`, trimmed. `"Commission System"` → `"commission-system"`.
+ * Returns undefined for empty input so an absent domain stays absent.
+ */
+export function normalizeDomain(domain?: unknown): string | undefined {
+  const s = String(domain ?? "").trim().toLowerCase();
+  if (!s) return undefined;
+  const slug = s.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug || undefined;
+}
+
+// Ranking weights. BM25 core over query terms (title tokens counted heavier),
+// then secondary boosts. Tuned for hundreds–low-thousands of items.
+const RANK = {
+  k1: 1.5,
+  b: 0.75,
+  titleWeight: 3, // a query hit in the title counts as 3 body hits
+  tagBoost: 4,
+  domainBoost: 5,
+  pinnedBoost: 2,
+  recencyMax: 2,
+  recencyDays: 30,
+};
+
+// Type priors — a decision/constraint outranks a passing note at equal relevance.
+const TYPE_WEIGHT: Record<string, number> = {
+  decision: 2,
+  constraint: 2,
+  architecture: 1.5,
+  fact: 1,
+  glossary: 1,
+  todo: 0.5,
+  note: 0,
+};
+
+/**
+ * Rank items for a query using a BM25-lite core (corpus IDF + length
+ * normalization, title tokens weighted) plus secondary signals: tag matches,
+ * domain match (explicit filter or query mention), pinned, type prior, and a
+ * recency nudge. Returns every item with its score, sorted descending; callers
+ * filter `score > 0`.
+ *
+ * Replaces the flat substring `scoreItem` for retrieval — same inputs available,
+ * but rare terms outweigh common ones and title hits beat body hits, so the top
+ * of the list is tighter and the LLM reads fewer wasted items. `scoreItem` is
+ * kept for back-compat.
+ */
+export function rankItems(
+  items: MemoryItem[],
+  queryText: string,
+  opts: { tagTokens?: string[]; domain?: string; now?: number } = {},
+): Array<{ item: MemoryItem; score: number }> {
+  const qSet = new Set(tokenize(queryText));
+  const tagTokens = opts.tagTokens ?? [];
+  const now = opts.now ?? Date.now();
+  const N = Math.max(items.length, 1);
+
+  // Document frequency over title+content tokens, for IDF.
+  const df = new Map<string, number>();
+  const docs = items.map((it) => {
+    const titleToks = tokenize(it.title);
+    const bodyToks = tokenize(it.content);
+    for (const term of new Set([...titleToks, ...bodyToks])) {
+      df.set(term, (df.get(term) ?? 0) + 1);
+    }
+    return { titleToks, bodyToks, len: titleToks.length + bodyToks.length };
+  });
+  const avgLen = docs.reduce((a, d) => a + d.len, 0) / N || 1;
+
+  return items
+    .map((it, i) => {
+      const doc = docs[i];
+      let score = 0;
+
+      for (const term of qSet) {
+        const dfT = df.get(term) ?? 0;
+        // BM25+ nonneg IDF: always >= 0 so common terms never subtract.
+        const idf = Math.log(1 + (N - dfT + 0.5) / (dfT + 0.5));
+        const tfTitle = doc.titleToks.filter((t) => t === term).length * RANK.titleWeight;
+        const tfBody = doc.bodyToks.filter((t) => t === term).length;
+        const tf = tfTitle + tfBody;
+        if (tf === 0) continue;
+        const denom = tf + RANK.k1 * (1 - RANK.b + RANK.b * (doc.len / avgLen));
+        score += (idf * (tf * (RANK.k1 + 1))) / denom;
+      }
+
+      const itemTags = new Set(normalizeTags(it.tags));
+      for (const t of tagTokens) if (itemTags.has(t)) score += RANK.tagBoost;
+
+      if (it.domain) {
+        if (opts.domain && it.domain === opts.domain) score += RANK.domainBoost;
+        if (qSet.has(it.domain)) score += RANK.domainBoost;
+      }
+
+      if (it.pinned) score += RANK.pinnedBoost;
+
+      // Priors only apply once an item already has some relevance signal, so
+      // pure-noise items stay at 0 and get filtered out by callers.
+      if (score > 0) {
+        score += TYPE_WEIGHT[it.type] ?? 0;
+        const t = Date.parse(it.updatedAt || it.createdAt || "");
+        if (Number.isFinite(t)) {
+          const ageDays = (now - t) / 86400000;
+          if (ageDays >= 0 && ageDays < RANK.recencyDays) {
+            score += RANK.recencyMax * (1 - ageDays / RANK.recencyDays);
+          }
+        }
+      }
+
+      return { item: it, score };
+    })
+    .sort((a, b) => b.score - a.score);
+}
+
 export function tokenize(s: unknown): string[] {
   return String(s || "")
     .toLowerCase()

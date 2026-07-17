@@ -225,7 +225,17 @@ context-bridge-mcp view --open        # writes .ai/memory-view.html and opens it
 context-bridge-mcp view --out ~/mem.html
 ```
 
-The page is one file with no external assets (works offline, shareable): search box + type filter over all items, each shown as a card with tags, dates, and content. Regenerate any time — it's gitignored by default.
+The page is one file with no external assets (works offline, shareable): search box + type/domain filters over all items, each shown as a card with tags, dates, and content. Toggle **Graph** for a domain-cluster view — each domain is a hub, its items orbit it, and clicking an item jumps to it in the list. Regenerate any time — it's gitignored by default.
+
+## Organizing with domains
+
+Every item can carry a **domain** — a single grouping bucket (`orders`, `commissions`, `auth`) that answers "where does this belong?". It's optional and backward-compatible; items saved before you adopt domains simply have none.
+
+- **Save with one:** `memory_save` / `memory_update` accept a `domain` field (slugified automatically; pass `""` to `memory_update` to clear it).
+- **Scope retrieval:** `memory_search` and `memory_get_bundle` accept a `domain` filter — load just the `orders` cluster instead of the whole store, so the model reads less.
+- **On import:** each `<!-- N. NAME -->` section banner becomes the domain of the blocks beneath it.
+
+Retrieval ranking is **BM25-lite**: rare query terms outweigh common ones, title hits beat body hits, and matches get small boosts for tag/domain overlap, pinned state, item type (a `decision` outranks a passing `note`), and recency. The effect is a tighter top-of-list, so a context bundle spends its token budget on the items that actually matter.
 
 Power-user peek at raw SQLite (items are stored as JSON blobs, so it's terse):
 

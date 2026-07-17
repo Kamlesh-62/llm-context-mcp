@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   newId,
   normalizeTags,
+  normalizeDomain,
   validateType,
   findSimilarItems,
 } from "../domain.js";
@@ -30,6 +31,10 @@ export function registerWriteTools(server: McpServer): void {
         title: z.string().min(1),
         content: z.string().min(1),
         tags: z.array(z.string()).optional(),
+        domain: z
+          .string()
+          .optional()
+          .describe("Grouping bucket, e.g. orders|commissions|auth (one per item)"),
         pinned: z.boolean().optional(),
         source: z.string().optional().describe("e.g. claude|codex|gemini"),
         expiresAt: z.string().optional().describe("ISO 8601 expiry date. Item ignored after this date."),
@@ -37,7 +42,7 @@ export function registerWriteTools(server: McpServer): void {
         projectRoot: projectRootInput,
       },
     },
-    async ({ type, title, content, tags, pinned, source, expiresAt, supersede, projectRoot }) => {
+    async ({ type, title, content, tags, domain, pinned, source, expiresAt, supersede, projectRoot }) => {
       const createdAt = nowIso();
       let itemId = "";
       let warning = "";
@@ -70,6 +75,7 @@ export function registerWriteTools(server: McpServer): void {
           title: trimmedTitle,
           content: trimmedContent,
           tags: normalizeTags(tags),
+          ...(normalizeDomain(domain) ? { domain: normalizeDomain(domain) } : {}),
           pinned: Boolean(pinned),
           createdAt,
           updatedAt: createdAt,
@@ -132,11 +138,15 @@ export function registerWriteTools(server: McpServer): void {
           .optional()
           .describe("note|decision|fact|constraint|todo|architecture|glossary"),
         tags: z.array(z.string()).optional(),
+        domain: z
+          .string()
+          .optional()
+          .describe("Grouping bucket, e.g. orders|commissions|auth. Empty string clears it."),
         pinned: z.boolean().optional(),
         projectRoot: projectRootInput,
       },
     },
-    async ({ itemId, title, content, type, tags, pinned, projectRoot }) => {
+    async ({ itemId, title, content, type, tags, domain, pinned, projectRoot }) => {
       let msg = "";
       await withStore(async (st) => {
         const it = st.items.find((x) => x.id === itemId);
@@ -148,6 +158,11 @@ export function registerWriteTools(server: McpServer): void {
         if (title !== undefined) it.title = title.trim();
         if (content !== undefined) it.content = content.trim();
         if (tags !== undefined) it.tags = normalizeTags(tags);
+        if (domain !== undefined) {
+          const d = normalizeDomain(domain);
+          if (d) it.domain = d;
+          else delete it.domain;
+        }
         if (pinned !== undefined) it.pinned = Boolean(pinned);
         it.updatedAt = nowIso();
         msg = `Updated item ${itemId}`;

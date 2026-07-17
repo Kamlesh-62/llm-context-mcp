@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { newId, normalizeTags, validateType } from "../domain.js";
+import { newId, normalizeDomain, normalizeTags, validateType } from "../domain.js";
 import { resolveAuthor } from "../identity.js";
 import { findProjectRoot, nowIso } from "../runtime.js";
 import { withStore } from "../storage.js";
@@ -145,6 +145,9 @@ function toMemoryItem(
   const rawTags = [...parsed.tags];
   if (opts.tagSections && parsed.section) rawTags.push(sectionTag(parsed.section));
 
+  // The `<!-- N. NAME -->` section banner a block sits under is its domain.
+  const domain = parsed.section ? normalizeDomain(parsed.section) : undefined;
+
   const author = resolveAuthor(opts.projectRoot);
   const item: MemoryItem = {
     id: newId("mem"),
@@ -152,6 +155,7 @@ function toMemoryItem(
     title: parsed.title.trim(),
     content: parsed.content.trim(),
     tags: normalizeTags(rawTags),
+    ...(domain ? { domain } : {}),
     source: opts.source ?? parsed.source ?? "md-import",
     createdAt: parsed.created || now,
     updatedAt: parsed.updated || parsed.created || now,

@@ -18,6 +18,12 @@ export interface MemoryItem {
   title: string;
   content: string;
   tags: string[];
+  /**
+   * Optional grouping bucket (e.g. "orders", "commissions", "auth"). One per
+   * item — the memory's home domain. Used to scope/boost retrieval. Slugified
+   * via normalizeDomain. Backward-compatible: absent on pre-Phase-1 items.
+   */
+  domain?: string;
   source?: string;
   author?: MemoryItemAuthor;
   pinned?: boolean;

@@ -109,6 +109,24 @@ describe("parseMarkdownItems", () => {
     expect(parseMarkdownItems(md)[0].tags).toEqual(["a", "b", "c"]);
   });
 
+  it("exposes the section banner so it can map to a domain", () => {
+    const md = [
+      "<!-- ============ -->",
+      "<!-- 2. COMMISSION SYSTEM -->",
+      "<!-- ============ -->",
+      "",
+      "---",
+      "type: architecture",
+      "title: Binary cycles",
+      "---",
+      "",
+      "Body.",
+    ].join("\n");
+    const items = parseMarkdownItems(md);
+    expect(items).toHaveLength(1);
+    expect(items[0].section).toBe("COMMISSION SYSTEM");
+  });
+
   it("ignores a fence that never closes (malformed)", () => {
     const md = ["prose", "---", "type: note", "title: unterminated", "still going"].join("\n");
     // No closing `---`; nothing valid to import.

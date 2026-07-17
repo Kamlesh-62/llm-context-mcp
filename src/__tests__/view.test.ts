@@ -34,9 +34,13 @@ describe("renderHtml", () => {
   it("is a single self-contained document with no external references", () => {
     const html = renderHtml(storeWith([{ title: "A" }, { title: "B" }]), meta);
     expect(html.startsWith("<!doctype html>")).toBe(true);
-    expect(html).not.toMatch(/https?:\/\//);
-    expect(html).not.toMatch(/\bsrc=/);
+    // No asset loads over the network. (The inert SVG namespace URI is allowed.)
+    expect(html).not.toMatch(/\bsrc\s*=/);
     expect(html).not.toMatch(/<link\b/);
+    expect(html).not.toMatch(/href\s*=\s*["']https?:/);
+    // The only permitted http(s) occurrence is the SVG namespace constant.
+    const httpHits = html.match(/https?:\/\/[^"'\s)]+/g) || [];
+    expect(httpHits.every((u) => u === "http://www.w3.org/2000/svg")).toBe(true);
   });
 
   it("reports the item count and backend in the header", () => {

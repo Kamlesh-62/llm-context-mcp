@@ -2,9 +2,9 @@ import { z } from "zod";
 
 import {
   safeSnippet,
-  scoreItem,
-  tokenize,
+  rankItems,
   normalizeTags,
+  normalizeDomain,
   validateType,
   isExpired,
 } from "../domain.js";
@@ -75,6 +75,7 @@ export function registerReadTools(server: McpServer): void {
         limit: z.number().int().min(1).max(50).default(10),
         types: z.array(z.string()).optional().describe("Filter by item types"),
         tags: z.array(z.string()).optional().describe("Filter by tags"),
+        domain: z.string().optional().describe("Filter by domain (grouping bucket)"),
         includeContent: z
           .boolean()
           .default(false)
@@ -83,9 +84,9 @@ export function registerReadTools(server: McpServer): void {
         projectRoot: projectRootInput,
       },
     },
-    async ({ query, limit, types, tags, includeContent, staleOnly, projectRoot }) => {
-      const queryTokens = tokenize(query);
+    async ({ query, limit, types, tags, domain, includeContent, staleOnly, projectRoot }) => {
       const tagTokens = normalizeTags(tags);
+      const domainFilter = normalizeDomain(domain);
 
       const typeSet = types?.length
         ? new Set(types.map((t) => validateType(t)))
@@ -105,6 +106,10 @@ export function registerReadTools(server: McpServer): void {
             items = items.filter((it) => typeSet.has(validateType(it.type)));
           }
 
+          if (domainFilter) {
+            items = items.filter((it) => it.domain === domainFilter);
+          }
+
           if (staleOnly) {
             items = items.filter((it) => {
               const lastUsed = Date.parse(it.lastUsedAt || it.updatedAt || it.createdAt || "");
@@ -112,13 +117,8 @@ export function registerReadTools(server: McpServer): void {
             });
           }
 
-          matches = items
-            .map((it) => ({
-              item: it,
-              score: scoreItem(it, queryTokens, tagTokens),
-            }))
+          matches = rankItems(items, query, { tagTokens, domain: domainFilter, now: Date.now() })
             .filter((x) => x.score > 0)
-            .sort((a, b) => b.score - a.score)
             .slice(0, limit);
 
           // Update lastUsedAt on matched items
@@ -140,6 +140,7 @@ export function registerReadTools(server: McpServer): void {
         type: item.type,
         title: item.title,
         tags: item.tags || [],
+        ...(item.domain ? { domain: item.domain } : {}),
         pinned: Boolean(item.pinned),
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
@@ -177,6 +178,7 @@ export function registerReadTools(server: McpServer): void {
         maxItems: z.number().int().min(1).max(50).default(12),
         maxChars: z.number().int().min(500).max(20000).default(6000),
         types: z.array(z.string()).optional().describe("Filter by item types"),
+        domain: z.string().optional().describe("Scope the bundle to one domain (grouping bucket)"),
         includePinned: z.boolean().default(true),
         projectRoot: projectRootInput,
       },
@@ -186,13 +188,14 @@ export function registerReadTools(server: McpServer): void {
       maxItems,
       maxChars,
       types,
+      domain,
       includePinned,
       projectRoot,
     }) => {
-      const queryTokens = tokenize(prompt);
       const typeSet = types?.length
         ? new Set(types.map((t) => validateType(t)))
         : null;
+      const domainFilter = normalizeDomain(domain);
       const now = nowIso();
 
       let chosen: typeof store.items = [];
@@ -202,16 +205,20 @@ export function registerReadTools(server: McpServer): void {
         async (st) => {
           store = st;
           const active = st.items.filter((it) => !isExpired(it));
-          const candidates = typeSet
+          const typed = typeSet
             ? active.filter((it) => typeSet.has(validateType(it.type)))
             : active;
+          const candidates = domainFilter
+            ? typed.filter((it) => it.domain === domainFilter)
+            : typed;
 
           const pinned = includePinned ? candidates.filter((x) => x.pinned) : [];
-          const rest = candidates
-            .filter((x) => !x.pinned)
-            .map((it) => ({ item: it, score: scoreItem(it, queryTokens, []) }))
+          const rest = rankItems(
+            candidates.filter((x) => !x.pinned),
+            prompt,
+            { domain: domainFilter, now: Date.now() },
+          )
             .filter((x) => x.score > 0)
-            .sort((a, b) => b.score - a.score)
             .map((x) => x.item);
 
           chosen = [...pinned, ...rest].slice(0, maxItems);
@@ -236,7 +243,7 @@ export function registerReadTools(server: McpServer): void {
 
       for (const it of chosen) {
         const header =
-          `- [${it.id}] (${it.type}${it.pinned ? ", pinned" : ""}) ${it.title || ""}`.trim();
+          `- [${it.id}] (${it.type}${it.domain ? `, ${it.domain}` : ""}${it.pinned ? ", pinned" : ""}) ${it.title || ""}`.trim();
         const body = safeSnippet(it.content, 800);
         const line = `${header}\n  ${body}\n`;
         if (out.length + line.length > maxChars) break;

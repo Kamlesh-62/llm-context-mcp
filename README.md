@@ -134,6 +134,7 @@ Call memory_search with query "auth"
 | `memory_propose` | Save with an approval step (creates a proposal) |
 | `memory_approve_proposal` | Approve or reject a pending proposal |
 | `memory_list_proposals` | List proposals by status |
+| `memory_link` | Create/remove a typed link between two items (part-of, depends-on, supersedes, …) |
 | `memory_pin` | Pin/unpin items (pinned items always appear in bundles) |
 | `memory_update` | Update an existing item's fields |
 | `memory_delete` | Permanently remove an item |
@@ -240,6 +241,23 @@ context-bridge-mcp view --out ~/mem.html
 ```
 
 The page is one file with no external assets (works offline, shareable): search box + type/domain filters over all items, each shown as a card with tags, dates, and content. Toggle **Graph** for a domain-cluster view — each domain is a hub, its items orbit it, and clicking an item jumps to it in the list. Regenerate any time — it's gitignored by default.
+
+## Linking memories
+
+Beyond domains (which group items), **links** connect specific items with a typed, directed edge:
+
+```
+Call memory_link with { "from": "mem_a", "to": "mem_b", "rel": "depends-on" }
+```
+
+Relations: `part-of`, `relates-to`, `depends-on`, `supersedes`, `example-of`. Pass `remove: true` to delete an edge; deleting an item also strips links that pointed at it.
+
+Two payoffs:
+
+- **Precise expansion.** `memory_get_bundle` pulls the ranked items *and* one hop of their links — so loading "binary cycle pipeline" also brings in the `config.php` it `depends-on` and the "Commission Types" it's `part-of`, instead of unrelated high-scoring items.
+- **Staleness pruning.** A `supersedes` edge marks its target stale: superseded items are hidden from `memory_get_bundle`, `memory_search`, and `memory_map` by default (pass `includeSuperseded: true` to see them), so the model reads the current fact, not both.
+
+In the [viewer](#viewing-memory) **Graph** view, links are drawn as edges between item dots (supersedes shown dashed, its target dimmed); the list view shows a `links:` row per item.
 
 ## Organizing with domains
 

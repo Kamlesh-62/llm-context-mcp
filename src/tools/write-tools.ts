@@ -172,6 +172,72 @@ export function registerWriteTools(server: McpServer): void {
     },
   );
 
+  // memory_link
+  server.registerTool(
+    "memory_link",
+    {
+      description:
+        "Create or remove a typed link between two memory items. Relationships: " +
+        "part-of, relates-to, depends-on, supersedes, example-of. A `supersedes` " +
+        "link marks the target as stale so retrieval hides it in favor of the source.",
+      inputSchema: {
+        from: z.string().min(1).describe("Source item id (the link is stored on this item)"),
+        to: z.string().min(1).describe("Target item id"),
+        rel: z
+          .enum(["part-of", "relates-to", "depends-on", "supersedes", "example-of"])
+          .describe("Relationship type"),
+        remove: z.boolean().optional().describe("Remove this link instead of adding it"),
+        projectRoot: projectRootInput,
+      },
+    },
+    async ({ from, to, rel, remove, projectRoot }) => {
+      let msg = "";
+      await withStore(async (st) => {
+        if (from === to) {
+          msg = "Cannot link an item to itself.";
+          return false;
+        }
+        const a = st.items.find((x) => x.id === from);
+        const b = st.items.find((x) => x.id === to);
+        if (!a) {
+          msg = `Item not found: ${from}`;
+          return false;
+        }
+        if (!b) {
+          msg = `Item not found: ${to}`;
+          return false;
+        }
+
+        const links = a.links ?? [];
+        const idx = links.findIndex((l) => l.to === to && l.rel === rel);
+
+        if (remove) {
+          if (idx === -1) {
+            msg = `No ${rel} link from ${from} to ${to}.`;
+            return false;
+          }
+          links.splice(idx, 1);
+          if (links.length) a.links = links;
+          else delete a.links;
+          a.updatedAt = nowIso();
+          msg = `Removed ${rel} link ${from} -> ${to}.`;
+          return true;
+        }
+
+        if (idx !== -1) {
+          msg = `Link already exists: ${from} -[${rel}]-> ${to}.`;
+          return false;
+        }
+        links.push({ to, rel });
+        a.links = links;
+        a.updatedAt = nowIso();
+        msg = `Linked ${from} -[${rel}]-> ${to}.`;
+        return true;
+      }, storeOptions(projectRoot));
+      return { content: [{ type: "text", text: msg }] };
+    },
+  );
+
   // memory_delete
   server.registerTool(
     "memory_delete",
@@ -191,6 +257,15 @@ export function registerWriteTools(server: McpServer): void {
           return false;
         }
         st.items.splice(idx, 1);
+        // Strip now-dangling links that pointed at the deleted item.
+        for (const it of st.items) {
+          if (!it.links?.length) continue;
+          const kept = it.links.filter((l) => l.to !== itemId);
+          if (kept.length !== it.links.length) {
+            if (kept.length) it.links = kept;
+            else delete it.links;
+          }
+        }
         msg = `Deleted item ${itemId}`;
         return true;
       }, storeOptions(projectRoot));

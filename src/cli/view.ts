@@ -88,6 +88,11 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
   .hub-label { font-weight: 700; font-size: 12px; }
   svg .node { cursor: pointer; }
   svg .edge { stroke: #cbd5e1; stroke-width: 1; }
+  svg .link { stroke: #6366f1; stroke-width: 1.5; opacity: 0.7; }
+  svg .link-sup { stroke: #ef4444; stroke-width: 1.5; stroke-dasharray: 5 3; opacity: 0.8; }
+  svg .stale { opacity: 0.3; }
+  .legend { font-size: 12px; color: #6b7280; margin: 8px 0 0; }
+  .legend b { color: #6366f1; } .legend i { color: #ef4444; font-style: normal; }
   pre { margin: 0; white-space: pre-wrap; word-wrap: break-word; font: 12.5px/1.5 ui-monospace,
         SFMono-Regular, Menlo, monospace; background: #f8fafc; border: 1px solid #eef0f3;
         border-radius: 6px; padding: 10px; overflow-x: auto; }
@@ -109,6 +114,7 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
     svg { background: #0f1115; border-color: #262a33; }
     svg text { fill: #cbd5e1; }
     svg .edge { stroke: #334155; }
+    .legend { color: #9ca3af; }
   }
 </style>
 </head>
@@ -129,12 +135,19 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
 <main>
   <p id="count"></p>
   <div id="list"></div>
-  <div id="graph"><svg id="svg" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet"></svg></div>
+  <div id="graph">
+    <svg id="svg" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet"></svg>
+    <p class="legend">Hubs = domains, dots = items (color by type). <b>— links</b> between items; <i>--- supersedes</i> (target dimmed). Click a dot to open it in the list.</p>
+  </div>
 </main>
 <script id="data" type="application/json">${embedJson(items)}</script>
 <script>
   const ITEMS = JSON.parse(document.getElementById("data").textContent);
   const SVGNS = "http://www.w3.org/2000/svg";
+  const TITLE_BY_ID = {};
+  ITEMS.forEach((i) => { TITLE_BY_ID[i.id] = i.title; });
+  const STALE = new Set();
+  ITEMS.forEach((i) => (i.links || []).forEach((l) => { if (l.rel === "supersedes") STALE.add(l.to); }));
   const list = document.getElementById("list");
   const graph = document.getElementById("graph");
   const svg = document.getElementById("svg");
@@ -189,9 +202,14 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
       badges.appendChild(el("span", "badge", it.type));
       if (it.domain) badges.appendChild(el("span", "dom", it.domain));
       if (it.pinned) badges.appendChild(el("span", "badge pin", "pinned"));
+      if (STALE.has(it.id)) badges.appendChild(el("span", "badge pin", "superseded"));
       for (const t of it.tags || []) badges.appendChild(el("span", "tag", t));
       card.appendChild(badges);
       card.appendChild(el("pre", null, it.content));
+      if (it.links && it.links.length) {
+        card.appendChild(el("div", "dates",
+          "links: " + it.links.map((l) => l.rel + " → " + (TITLE_BY_ID[l.to] || l.to)).join("  ·  ")));
+      }
       card.appendChild(el("div", "dates",
         "created " + (it.createdAt || "?") + "  ·  updated " + (it.updatedAt || "?") +
         (it.source ? "  ·  " + it.source : "") +
@@ -206,16 +224,25 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
   function renderGraph(items) {
     svg.textContent = "";
     const W = 1000, H = 700, cx = W / 2, cy = H / 2;
+    const shown = new Set(items.map((it) => it.id));
+    // Items marked stale by a supersedes edge (dimmed in the graph).
+    const stale = new Set();
+    for (const it of items) for (const l of it.links || []) if (l.rel === "supersedes") stale.add(l.to);
+
     const groups = {};
     for (const it of items) (groups[it.domain || "(no domain)"] = groups[it.domain || "(no domain)"] || []).push(it);
     const names = Object.keys(groups).sort();
     const D = names.length || 1;
     const hubR = Math.min(W, H) * 0.32;
 
-    const edges = svgEl("g", {});
+    const edges = svgEl("g", {}); // hub -> item spokes
+    const linkG = svgEl("g", {}); // item -> item typed links
     const nodes = svgEl("g", {});
     svg.appendChild(edges);
+    svg.appendChild(linkG);
     svg.appendChild(nodes);
+
+    const pos = {}; // id -> {x,y}
 
     names.forEach((name, gi) => {
       const ha = (2 * Math.PI * gi) / D - Math.PI / 2;
@@ -223,10 +250,8 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
       const hy = D === 1 ? cy : cy + hubR * Math.sin(ha);
       const members = groups[name];
 
-      // hub
       nodes.appendChild(svgEl("circle", { cx: hx, cy: hy, r: 7, fill: "#4f46e5", class: "node" }));
-      const label = svgEl("text", { x: hx, y: hy - 12, "text-anchor": "middle", class: "hub-label" }, name + " (" + members.length + ")");
-      nodes.appendChild(label);
+      nodes.appendChild(svgEl("text", { x: hx, y: hy - 12, "text-anchor": "middle", class: "hub-label" }, name + " (" + members.length + ")"));
 
       const n = members.length;
       const satR = Math.max(38, Math.min(120, 12 * Math.sqrt(n) + 26));
@@ -234,13 +259,31 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
         const a = (2 * Math.PI * j) / Math.max(n, 1) - Math.PI / 2;
         const x = hx + satR * Math.cos(a);
         const y = hy + satR * Math.sin(a);
+        pos[it.id] = { x: x, y: y };
         edges.appendChild(svgEl("line", { x1: hx, y1: hy, x2: x, y2: y, class: "edge" }));
-        const dot = svgEl("circle", { cx: x, cy: y, r: it.pinned ? 6 : 4.5, fill: typeColor(it.type), class: "node" });
-        dot.appendChild(svgEl("title", {}, it.title + "  [" + it.type + "]"));
+        const cls = "node" + (stale.has(it.id) ? " stale" : "");
+        const dot = svgEl("circle", { cx: x, cy: y, r: it.pinned ? 6 : 4.5, fill: typeColor(it.type), class: cls });
+        dot.appendChild(svgEl("title", {}, it.title + "  [" + it.type + "]" + (stale.has(it.id) ? "  (superseded)" : "")));
         dot.addEventListener("click", () => { q.value = it.title; setMode("list"); render(); });
         nodes.appendChild(dot);
       });
     });
+
+    // Typed item-to-item links, drawn only when both endpoints are visible.
+    for (const it of items) {
+      const p = pos[it.id];
+      if (!p) continue;
+      for (const l of it.links || []) {
+        const target = pos[l.to];
+        if (!target || !shown.has(l.to)) continue;
+        const line = svgEl("line", {
+          x1: p.x, y1: p.y, x2: target.x, y2: target.y,
+          class: l.rel === "supersedes" ? "link-sup" : "link",
+        });
+        line.appendChild(svgEl("title", {}, it.title + " —[" + l.rel + "]→ " + l.to));
+        linkG.appendChild(line);
+      }
+    }
   }
 
   function setMode(m) {

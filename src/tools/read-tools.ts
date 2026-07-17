@@ -4,6 +4,8 @@ import {
   safeSnippet,
   rankItems,
   buildMemoryMap,
+  supersededIds,
+  expandByLinks,
   normalizeTags,
   normalizeDomain,
   validateType,
@@ -81,11 +83,15 @@ export function registerReadTools(server: McpServer): void {
           .boolean()
           .default(false)
           .describe("Include full content"),
+        includeSuperseded: z
+          .boolean()
+          .default(false)
+          .describe("Include items marked stale by a supersedes link"),
         staleOnly: z.boolean().default(false).describe("Only return items unused for staleDays (default 90)"),
         projectRoot: projectRootInput,
       },
     },
-    async ({ query, limit, types, tags, domain, includeContent, staleOnly, projectRoot }) => {
+    async ({ query, limit, types, tags, domain, includeContent, includeSuperseded, staleOnly, projectRoot }) => {
       const tagTokens = normalizeTags(tags);
       const domainFilter = normalizeDomain(domain);
 
@@ -109,6 +115,11 @@ export function registerReadTools(server: McpServer): void {
 
           if (domainFilter) {
             items = items.filter((it) => it.domain === domainFilter);
+          }
+
+          if (!includeSuperseded) {
+            const stale = supersededIds(st.items);
+            items = items.filter((it) => !stale.has(it.id));
           }
 
           if (staleOnly) {
@@ -142,6 +153,7 @@ export function registerReadTools(server: McpServer): void {
         title: item.title,
         tags: item.tags || [],
         ...(item.domain ? { domain: item.domain } : {}),
+        ...(item.links?.length ? { links: item.links } : {}),
         pinned: Boolean(item.pinned),
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
@@ -205,7 +217,8 @@ export function registerReadTools(server: McpServer): void {
       await withStore(
         async (st) => {
           store = st;
-          const active = st.items.filter((it) => !isExpired(it));
+          const stale = supersededIds(st.items);
+          const active = st.items.filter((it) => !isExpired(it) && !stale.has(it.id));
           const typed = typeSet
             ? active.filter((it) => typeSet.has(validateType(it.type)))
             : active;
@@ -222,7 +235,17 @@ export function registerReadTools(server: McpServer): void {
             .filter((x) => x.score > 0)
             .map((x) => x.item);
 
-          chosen = [...pinned, ...rest].slice(0, maxItems);
+          const selected = [...pinned, ...rest];
+          // Widen the top of the selection by one link hop: pull in what the
+          // chosen items point at (deps, parents, examples), skipping stale ones.
+          const seedIds = selected.slice(0, maxItems).map((it) => it.id);
+          const reachable = expandByLinks(candidates, seedIds, 1);
+          const selectedIds = new Set(selected.map((it) => it.id));
+          const neighbors = candidates.filter(
+            (it) => reachable.has(it.id) && !selectedIds.has(it.id),
+          );
+
+          chosen = [...selected, ...neighbors].slice(0, maxItems);
 
           // Update lastUsedAt on bundled items
           const chosenIds = new Set(chosen.map((it) => it.id));
@@ -273,10 +296,14 @@ export function registerReadTools(server: McpServer): void {
           .boolean()
           .default(false)
           .describe("Add a one-line snippet per item (costs more tokens)"),
+        includeSuperseded: z
+          .boolean()
+          .default(false)
+          .describe("Include items marked stale by a supersedes link"),
         projectRoot: projectRootInput,
       },
     },
-    async ({ types, domain, includeSnippet, projectRoot }) => {
+    async ({ types, domain, includeSnippet, includeSuperseded, projectRoot }) => {
       const typeSet = types?.length ? new Set(types.map((t) => validateType(t))) : null;
       const domainFilter = normalizeDomain(domain);
 
@@ -285,6 +312,10 @@ export function registerReadTools(server: McpServer): void {
         let items = st.items.filter((it) => !isExpired(it));
         if (typeSet) items = items.filter((it) => typeSet.has(validateType(it.type)));
         if (domainFilter) items = items.filter((it) => it.domain === domainFilter);
+        if (!includeSuperseded) {
+          const stale = supersededIds(st.items);
+          items = items.filter((it) => !stale.has(it.id));
+        }
         map = buildMemoryMap(items, { includeSnippet });
         return false;
       }, storeOptions(projectRoot));
@@ -323,6 +354,7 @@ export function registerReadTools(server: McpServer): void {
             title: it.title,
             ...(it.domain ? { domain: it.domain } : {}),
             tags: it.tags || [],
+            ...(it.links?.length ? { links: it.links } : {}),
             pinned: Boolean(it.pinned),
             content: String(it.content || ""),
             createdAt: it.createdAt,

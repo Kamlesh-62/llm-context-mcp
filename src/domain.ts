@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 
 import { ALLOWED_TYPES, CONFIG, LIMITS } from "./config.js";
-import type { MemoryItem, MemoryType } from "./types.js";
+import type { LinkRel, MemoryItem, MemoryType } from "./types.js";
 
 export function normalizeTags(tags?: unknown): string[] {
   const arr = Array.isArray(tags) ? tags : [];
@@ -221,6 +221,67 @@ export function buildMemoryMap(
     .sort((a, b) => b.count - a.count || a.domain.localeCompare(b.domain));
 
   return { total: items.length, groups };
+}
+
+/** All valid link relationship types. */
+export const LINK_RELS: LinkRel[] = [
+  "part-of",
+  "relates-to",
+  "depends-on",
+  "supersedes",
+  "example-of",
+];
+const LINK_REL_SET = new Set<string>(LINK_RELS);
+
+export function isLinkRel(rel: unknown): rel is LinkRel {
+  return typeof rel === "string" && LINK_REL_SET.has(rel);
+}
+
+/**
+ * Ids of items that some other item marks as superseded (an edge with
+ * `rel: "supersedes"` pointing at them). These are stale — retrieval hides them
+ * by default so the newer item wins and the model doesn't read both.
+ */
+export function supersededIds(items: MemoryItem[]): Set<string> {
+  const stale = new Set<string>();
+  for (const it of items) {
+    for (const link of it.links ?? []) {
+      if (link.rel === "supersedes") stale.add(link.to);
+    }
+  }
+  return stale;
+}
+
+/**
+ * Expand a seed set of item ids to include their linked neighbors, following
+ * outbound edges up to `hops` levels. Used to widen a context bundle precisely:
+ * once the ranked items are chosen, pull in what they point at (dependencies,
+ * parents, examples) instead of unrelated high-scoring items. Only edges whose
+ * target still exists are followed. Returns the seeds plus reachable neighbors.
+ */
+export function expandByLinks(
+  items: MemoryItem[],
+  seedIds: Iterable<string>,
+  hops = 1,
+): Set<string> {
+  const byId = new Map(items.map((it) => [it.id, it]));
+  const result = new Set<string>();
+  for (const id of seedIds) if (byId.has(id)) result.add(id);
+
+  let frontier = [...result];
+  for (let h = 0; h < hops && frontier.length; h++) {
+    const next: string[] = [];
+    for (const id of frontier) {
+      for (const link of byId.get(id)?.links ?? []) {
+        if (byId.has(link.to) && !result.has(link.to)) {
+          result.add(link.to);
+          next.push(link.to);
+        }
+      }
+    }
+    frontier = next;
+  }
+  return result;
 }
 
 export function tokenize(s: unknown): string[] {

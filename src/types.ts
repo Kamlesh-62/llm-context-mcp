@@ -12,6 +12,20 @@ export interface MemoryItemAuthor {
   team?: string;
 }
 
+/** Typed relationship between two memory items. */
+export type LinkRel =
+  | "part-of"
+  | "relates-to"
+  | "depends-on"
+  | "supersedes"
+  | "example-of";
+
+/** A directed edge from the owning item to `to`. */
+export interface MemoryLink {
+  to: string;
+  rel: LinkRel;
+}
+
 export interface MemoryItem {
   id: string;
   type: MemoryType;
@@ -24,6 +38,8 @@ export interface MemoryItem {
    * via normalizeDomain. Backward-compatible: absent on pre-Phase-1 items.
    */
   domain?: string;
+  /** Typed edges to other items (part-of, depends-on, supersedes, …). */
+  links?: MemoryLink[];
   source?: string;
   author?: MemoryItemAuthor;
   pinned?: boolean;

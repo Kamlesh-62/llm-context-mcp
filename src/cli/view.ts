@@ -83,16 +83,44 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
   #graph { display: none; }
   #graph.show { display: block; }
   #list.hide { display: none; }
-  svg { width: 100%; height: 70vh; background: #fff; border: 1px solid #e2e4e8; border-radius: 8px; }
-  svg text { font: 11px -apple-system, sans-serif; }
-  .hub-label { font-weight: 700; font-size: 12px; }
-  svg .node { cursor: pointer; }
-  svg .edge { stroke: #cbd5e1; stroke-width: 1; }
-  svg .link { stroke: #6366f1; stroke-width: 1.5; opacity: 0.7; }
-  svg .link-sup { stroke: #ef4444; stroke-width: 1.5; stroke-dasharray: 5 3; opacity: 0.8; }
-  svg .stale { opacity: 0.3; }
-  .legend { font-size: 12px; color: #6b7280; margin: 8px 0 0; }
-  .legend b { color: #6366f1; } .legend i { color: #ef4444; font-style: normal; }
+  /* Graph canvas is a fixed ink console regardless of page theme — a memory
+     "observatory": faint graph-paper dots + a soft indigo aurora up top. */
+  .canvas {
+    background:
+      radial-gradient(1100px 520px at 50% -12%, rgba(99,110,240,0.12), transparent 62%),
+      #0b0e14;
+    background-image:
+      radial-gradient(rgba(150,170,220,0.06) 1px, transparent 1.4px);
+    background-size: 24px 24px;
+    border: 1px solid #1c2438;
+    border-radius: 16px;
+    padding: 4px;
+    overflow: hidden;
+  }
+  svg#svg { width: 100%; height: auto; display: block; }
+  svg text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fill: #aeb8ca; }
+  .cell-frame { fill: rgba(148,163,214,0.022); stroke: #212a41; stroke-width: 1; }
+  .cell-title { fill: #d4dcec; font-size: 12.5px; font-weight: 600; letter-spacing: 0.16em; }
+  .cell-count { fill: #61708f; font-size: 10.5px; letter-spacing: 0.08em; }
+  .hub { fill: #5b6bf0; }
+  .hub-ring { fill: none; stroke: #5b6bf0; stroke-width: 1; opacity: 0.35; }
+  .hub-glow { fill: #5b6bf0; opacity: 0.13; }
+  .spoke { stroke: rgba(160,175,220,0.08); stroke-width: 1; }
+  .node { cursor: pointer; stroke: #0b0e14; stroke-width: 1.5; transition: stroke 0.1s; }
+  .node:hover { stroke: #ffffff; }
+  .link { stroke: #7c83ff; stroke-width: 1.6; opacity: 0.85; }
+  .link-sup { stroke: #f2635e; stroke-width: 1.6; stroke-dasharray: 5 4; opacity: 0.85; }
+  .stale { opacity: 0.26; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 9px 16px; align-items: center; margin: 14px 4px 2px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+    letter-spacing: 0.04em; color: #7f8ca6;
+  }
+  .legend .sw { display: inline-flex; align-items: center; gap: 7px; }
+  .legend .swatch { width: 9px; height: 9px; border-radius: 50%; }
+  .legend .rule { width: 20px; border-top: 2px solid #7c83ff; }
+  .legend .rule.sup { border-top-style: dashed; border-top-color: #f2635e; }
+  .legend .sep { width: 1px; height: 12px; background: #2a3348; }
   pre { margin: 0; white-space: pre-wrap; word-wrap: break-word; font: 12.5px/1.5 ui-monospace,
         SFMono-Regular, Menlo, monospace; background: #f8fafc; border: 1px solid #eef0f3;
         border-radius: 6px; padding: 10px; overflow-x: auto; }
@@ -111,10 +139,6 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
     .toggle { border-color: #303542; }
     .toggle button.active { background: #4f46e5; color: #fff; }
     pre { background: #0f1115; border-color: #262a33; }
-    svg { background: #0f1115; border-color: #262a33; }
-    svg text { fill: #cbd5e1; }
-    svg .edge { stroke: #334155; }
-    .legend { color: #9ca3af; }
   }
 </style>
 </head>
@@ -136,8 +160,8 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
   <p id="count"></p>
   <div id="list"></div>
   <div id="graph">
-    <svg id="svg" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet"></svg>
-    <p class="legend">Hubs = domains, dots = items (color by type). <b>— links</b> between items; <i>--- supersedes</i> (target dimmed). Click a dot to open it in the list.</p>
+    <div class="canvas"><svg id="svg" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div class="legend" id="legend"></div>
   </div>
 </main>
 <script id="data" type="application/json">${embedJson(items)}</script>
@@ -171,11 +195,34 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
     if (text != null) n.textContent = text;
     return n;
   }
-  // Stable color per type (no randomness → same layout every render).
-  function typeColor(t) {
-    let h = 0;
-    for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) % 360;
-    return "hsl(" + h + ",55%,55%)";
+  // Deliberate hue per memory type — color IS the signal (see the legend).
+  const TYPE_COLORS = {
+    decision: "#f5b454", constraint: "#f2635e", architecture: "#8b7cf6",
+    fact: "#4fc3d9", glossary: "#5bc49a", todo: "#f08a4b", note: "#8c9aae",
+  };
+  const TYPE_ORDER = ["decision", "constraint", "architecture", "fact", "glossary", "todo", "note"];
+  function typeColor(t) { return TYPE_COLORS[t] || "#8c9aae"; }
+
+  // Legend maps each present type to its color, plus the two edge styles.
+  function buildLegend() {
+    const legend = document.getElementById("legend");
+    legend.textContent = "";
+    const present = new Set(ITEMS.map((i) => i.type));
+    const types = TYPE_ORDER.filter((t) => present.has(t));
+    for (const t of present) if (!TYPE_ORDER.includes(t)) types.push(t);
+    for (const t of types) {
+      const sw = el("span", "sw");
+      const dot = el("span", "swatch");
+      dot.style.background = typeColor(t);
+      sw.appendChild(dot);
+      sw.appendChild(document.createTextNode(t));
+      legend.appendChild(sw);
+    }
+    legend.appendChild(el("span", "sep"));
+    const link = el("span", "sw"); link.appendChild(el("span", "rule")); link.appendChild(document.createTextNode("link"));
+    const sup = el("span", "sw"); const r = el("span", "rule"); r.classList.add("sup"); sup.appendChild(r); sup.appendChild(document.createTextNode("supersedes"));
+    legend.appendChild(link);
+    legend.appendChild(sup);
   }
 
   function filtered() {
@@ -219,57 +266,76 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
     if (items.length === 0) list.appendChild(el("div", "empty", "No items match."));
   }
 
-  // Cluster graph: one hub per domain, items as satellites linked to their hub.
-  // A true item-to-item edge graph arrives with the links[] model (Phase 3).
+  // Constellation graph: each domain is a framed cell (label in a header chip,
+  // never on the nodes), items orbit a glowing hub in concentric rings, and
+  // typed item-to-item links are drawn in one overlay so they can cross cells.
   function renderGraph(items) {
     svg.textContent = "";
-    const W = 1000, H = 700, cx = W / 2, cy = H / 2;
     const shown = new Set(items.map((it) => it.id));
-    // Items marked stale by a supersedes edge (dimmed in the graph).
     const stale = new Set();
     for (const it of items) for (const l of it.links || []) if (l.rel === "supersedes") stale.add(l.to);
 
     const groups = {};
     for (const it of items) (groups[it.domain || "(no domain)"] = groups[it.domain || "(no domain)"] || []).push(it);
-    const names = Object.keys(groups).sort();
-    const D = names.length || 1;
-    const hubR = Math.min(W, H) * 0.32;
+    // Largest domains first so the eye lands on the dense clusters.
+    const names = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length || a.localeCompare(b));
 
-    const edges = svgEl("g", {}); // hub -> item spokes
-    const linkG = svgEl("g", {}); // item -> item typed links
+    // Grid of cells sized to the number of domains; canvas height grows by rows.
+    const cols = names.length <= 1 ? 1 : names.length <= 4 ? 2 : 3;
+    const rows = Math.ceil(names.length / cols);
+    const W = 1000, cellW = W / cols, cellH = 300, pad = 14, headerH = 52;
+    const H = rows * cellH;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+
+    const frames = svgEl("g", {});
+    const spokes = svgEl("g", {});
+    const linkG = svgEl("g", {});
     const nodes = svgEl("g", {});
-    svg.appendChild(edges);
+    svg.appendChild(frames);
+    svg.appendChild(spokes);
     svg.appendChild(linkG);
     svg.appendChild(nodes);
 
     const pos = {}; // id -> {x,y}
 
     names.forEach((name, gi) => {
-      const ha = (2 * Math.PI * gi) / D - Math.PI / 2;
-      const hx = D === 1 ? cx : cx + hubR * Math.cos(ha);
-      const hy = D === 1 ? cy : cy + hubR * Math.sin(ha);
+      const col = gi % cols, row = Math.floor(gi / cols);
+      const x0 = col * cellW + pad, y0 = row * cellH + pad;
+      const w = cellW - 2 * pad, h = cellH - 2 * pad;
       const members = groups[name];
-
-      nodes.appendChild(svgEl("circle", { cx: hx, cy: hy, r: 7, fill: "#4f46e5", class: "node" }));
-      nodes.appendChild(svgEl("text", { x: hx, y: hy - 12, "text-anchor": "middle", class: "hub-label" }, name + " (" + members.length + ")"));
-
       const n = members.length;
-      const satR = Math.max(38, Math.min(120, 12 * Math.sqrt(n) + 26));
+
+      frames.appendChild(svgEl("rect", { x: x0, y: y0, width: w, height: h, rx: 13, class: "cell-frame" }));
+      frames.appendChild(svgEl("text", { x: x0 + 18, y: y0 + 28, class: "cell-title" }, name.toUpperCase()));
+      frames.appendChild(svgEl("text", { x: x0 + 18, y: y0 + 44, class: "cell-count" }, n + (n === 1 ? " ITEM" : " ITEMS")));
+
+      const cx = x0 + w / 2, cy = y0 + headerH + (h - headerH) / 2;
+      nodes.appendChild(svgEl("circle", { cx: cx, cy: cy, r: 20, class: "hub-glow" }));
+      nodes.appendChild(svgEl("circle", { cx: cx, cy: cy, r: 12, class: "hub-ring" }));
+      nodes.appendChild(svgEl("circle", { cx: cx, cy: cy, r: 5, class: "hub" }));
+
+      // Concentric rings so dense domains stay legible (no cramped pinwheel).
+      const maxR = Math.min(w, h - headerH) / 2 - 16;
+      const perRing = 11;
+      const rings = Math.ceil(n / perRing);
       members.forEach((it, j) => {
-        const a = (2 * Math.PI * j) / Math.max(n, 1) - Math.PI / 2;
-        const x = hx + satR * Math.cos(a);
-        const y = hy + satR * Math.sin(a);
+        const ring = Math.floor(j / perRing);
+        const inRing = Math.min(perRing, n - ring * perRing);
+        const k = j % perRing;
+        const rr = rings === 1 ? maxR * 0.86 : maxR * (0.46 + 0.54 * ((ring + 1) / rings));
+        const a = (2 * Math.PI * k) / Math.max(inRing, 1) - Math.PI / 2 + ring * 0.42;
+        const x = cx + rr * Math.cos(a), y = cy + rr * Math.sin(a);
         pos[it.id] = { x: x, y: y };
-        edges.appendChild(svgEl("line", { x1: hx, y1: hy, x2: x, y2: y, class: "edge" }));
+        spokes.appendChild(svgEl("line", { x1: cx, y1: cy, x2: x, y2: y, class: "spoke" }));
         const cls = "node" + (stale.has(it.id) ? " stale" : "");
-        const dot = svgEl("circle", { cx: x, cy: y, r: it.pinned ? 6 : 4.5, fill: typeColor(it.type), class: cls });
+        const dot = svgEl("circle", { cx: x, cy: y, r: it.pinned ? 6.5 : 5, fill: typeColor(it.type), class: cls });
         dot.appendChild(svgEl("title", {}, it.title + "  [" + it.type + "]" + (stale.has(it.id) ? "  (superseded)" : "")));
         dot.addEventListener("click", () => { q.value = it.title; setMode("list"); render(); });
         nodes.appendChild(dot);
       });
     });
 
-    // Typed item-to-item links, drawn only when both endpoints are visible.
+    // Typed item-to-item links (one overlay, so cross-cell edges still draw).
     for (const it of items) {
       const p = pos[it.id];
       if (!p) continue;
@@ -306,6 +372,7 @@ export function renderHtml(store: Store, meta: ViewMeta): string {
   domainSel.addEventListener("change", render);
   btnList.addEventListener("click", () => { setMode("list"); render(); });
   btnGraph.addEventListener("click", () => { setMode("graph"); render(); });
+  buildLegend();
   render();
 </script>
 </body>

@@ -83,11 +83,29 @@ async function capture(
 
 // ── entry ────────────────────────────────────────────────────────────────────
 
+/**
+ * Whether auto-capture is switched off via the `MEMORY_AUTOSAVE` env var.
+ * Accepts `off`/`0`/`false`/`no`/`disabled` (case-insensitive). This is the
+ * temporary kill-switch: the hook stays installed but early-exits, so a user
+ * can silence auto-save for a shell/session without editing any config. For a
+ * permanent removal, use `context-bridge-mcp uninstall-hooks`.
+ */
+function autosaveDisabled(): boolean {
+  const v = process.env.MEMORY_AUTOSAVE?.trim().toLowerCase();
+  return v === "off" || v === "0" || v === "false" || v === "no" || v === "disabled";
+}
+
 async function main(): Promise<void> {
   const mode = (process.argv[2] ?? "stop").toLowerCase();
   const raw = await readStdin();
   const payload = parsePayload(raw);
   const isGemini = Boolean(process.env.GEMINI_PROJECT_DIR);
+
+  if (autosaveDisabled()) {
+    // Kill-switch on — capture nothing, but still emit Gemini's expected reply.
+    if (isGemini) process.stdout.write("{}");
+    return;
+  }
 
   // Real-time passes fire often and need a lower bar; Stop is the final sweep.
   const minAssistantMessages = mode === "posttooluse" ? 1 : 2;

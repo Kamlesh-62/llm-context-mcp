@@ -67,7 +67,8 @@ Run `context-bridge-mcp setup --help` for all flags.
 
 ```bash
 context-bridge-mcp doctor    # health-check setup: MCP config, store readable, hooks wired + run
-context-bridge-mcp migrate --to sqlite   # move memory between JSON and SQLite (see Storage)
+context-bridge-mcp migrate --to sqlite       # move memory between JSON and SQLite (see Storage)
+context-bridge-mcp uninstall-hooks           # remove the auto-save hooks (see Turning off auto-save)
 context-bridge-mcp help      # list all commands
 ```
 
@@ -161,6 +162,15 @@ Items are deduplicated across sessions via title hashing and Jaccard similarity,
 
 Verify hooks are wired and have run: `context-bridge-mcp doctor`. Test the extractors: `npm run test:hooks`.
 
+### Turning off auto-save
+
+Two ways, depending on how permanent you want it:
+
+- **Temporary (per shell/session):** set `MEMORY_AUTOSAVE=off`. The hooks stay installed but early-exit, capturing nothing. Also accepts `0`, `false`, `no`, `disabled`. Unset it to resume.
+- **Permanent:** run `context-bridge-mcp uninstall-hooks`. It removes only the hooks this tool installed — the Claude `Stop`/`PostToolUse` groups and the Codex `notify` bridge — leaving unrelated hooks and config untouched. Scope it with `--cli claude,codex`. Re-enable any time with `context-bridge-mcp setup`.
+
+Either way the MCP tools (`memory_save`, `memory_get_bundle`, …) keep working; only automatic capture stops. Note the Codex `notify` bridge is global (`~/.codex/config.toml`), so removing it disables Codex auto-save for every project.
+
 ## Team attribution
 
 When a team shares a memory store, every item can record **who added it**. `setup` asks for your name and (optional) team once; new items are then stamped with an `author` field — whether you save them by hand (`memory_save`), through a proposal, or via the auto-save hooks.
@@ -192,6 +202,7 @@ See [`docs/STORAGE_BACKENDS.md`](docs/STORAGE_BACKENDS.md) for the full comparis
 |---|---|
 | `MEMORY_PROJECT_ROOT` | Force a specific project root |
 | `MEMORY_FILE_PATH` | Override the JSON memory file path |
+| `MEMORY_AUTOSAVE` | Set to `off`/`0`/`false`/`no`/`disabled` to silence auto-save hooks without uninstalling |
 | `MEMORY_STORAGE_BACKEND` | Force the storage backend (`json` \| `sqlite`) |
 | `MEMORY_DB_PATH` | Override the SQLite database path |
 | `MEMORY_AUTHOR_NAME` | Author name stamped on new items (overrides the saved identity) |

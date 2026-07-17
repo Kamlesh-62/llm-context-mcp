@@ -64,6 +64,15 @@ async function run(): Promise<void> {
     return;
   }
 
+  if (command === "uninstall-hooks" || command === "uninstall") {
+    const { runUninstallHooks } = await import("./src/cli/uninstall-hooks.js");
+    const exitCode = await runUninstallHooks(process.argv.slice(3));
+    if (typeof exitCode === "number" && exitCode !== 0) {
+      process.exitCode = exitCode;
+    }
+    return;
+  }
+
   if (command === "help" || command === "--help" || command === "-h") {
     printUsage();
     return;
@@ -84,6 +93,8 @@ Usage:
   context-bridge-mcp doctor [...]  Run health checks on project setup
   context-bridge-mcp migrate --to <json|sqlite> [--dry-run] [--force] [--set-default]
                                    Migrate memory between storage backends
+  context-bridge-mcp uninstall-hooks [--cli claude,codex]
+                                   Remove the auto-save hooks (temporary: MEMORY_AUTOSAVE=off)
   context-bridge-mcp help          Show this message
 `.trim());
 }
